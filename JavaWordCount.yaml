@@ -1,0 +1,49 @@
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: "java-word-count"
+  namespace: mark
+spec:
+  type: Scala
+  mode: cluster
+  image: "gitlab.planetrover.io:5050/sequoiadp/spark:latest"
+  imagePullSecrets: 
+    - login-cred
+  imagePullPolicy: Always
+  mainClass: org.apache.spark.examples.JavaWordCount
+  mainApplicationFile: "local:///opt/spark/examples/jars/spark-examples_2.12-3.0.2.jar"
+  arguments:
+    - alluxio://alluxio-master-0.staging-48-testing:19998/lorem.txt
+  sparkVersion: "3.0.2"
+  restartPolicy:
+    type: Never
+  dynamicAllocation:
+    enabled: false
+    minExecutors: 2
+    maxExecutors: 4
+  sparkConf:
+    spark.jars.ivy:                                          /tmp/.ivy
+    spark.sql.extensions:                                    io.delta.sql.DeltaSparkSessionExtension
+    spark.sql.catalog.spark_catalog:                         org.apache.spark.sql.delta.catalog.DeltaCatalog
+    spark.delta.logStore.class:                              org.apache.spark.sql.delta.storage.LocalLogStore
+    spark.sql.warehouse.dir:                                 alluxio://alluxio-master-0.staging-48-testing:19998/spark-warehouse/
+    spark.eventLog.enabled:                                  "true"
+    spark.eventLog.dir:                                      alluxio://alluxio-master-0.staging-48-testing:19998/spark-logs/
+    # spark.metrics.conf.*.sink.graphite.class:                org.apache.spark.metrics.sink.GraphiteSink
+    # spark.metrics.conf.*.sink.graphite.host:                 spark-dashboard-influx.mark
+    # spark.metrics.conf.*.sink.graphite.port:                 "2003"
+    # spark.metrics.conf.*.sink.graphite.period:               "10"
+    # spark.metrics.conf.*.sink.graphite.unit:                 seconds
+    # spark.metrics.conf.*.sink.graphite.prefix:               sdp
+    # spark.metrics.conf.*.source.jvm.class:                   org.apache.spark.metrics.source.JvmSource
+    # spark.metrics.appStatusSource.enabled:                   "true"
+  driver:
+    cores: 1
+    memory: 4g
+    serviceAccount: spark
+    javaOptions: -Dalluxio.master.rpc.addresses=alluxio-master-0.staging-48-testing:19998
+  executor:
+    instances: 2
+    cores: 2
+    memory: 8g
+    javaOptions: -Dalluxio.master.rpc.addresses=alluxio-master-0.staging-48-testing:19998

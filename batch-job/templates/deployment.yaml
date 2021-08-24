@@ -1,0 +1,89 @@
+{{- $jobSparkConfs := list }}
+{{- range $key, $val := .Values.sparkJob.sparkConf }}
+  {{- $jobSparkConfs = printf "%v=%v" $key $val | append $jobSparkConfs }}
+{{- end }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "batch-job.fullname" . }}
+  labels:
+    {{- include "batch-job.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "batch-job.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "batch-job.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "batch-job.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.sparkJob }}
+          env:
+            - name: SPARKJOB_NAMESPACE
+              value: {{ .namespace }}
+            - name: SPARKJOB_SPARKVERSION
+              value: {{ .sparkVersion }}
+            - name: SPARKJOB_IMAGE
+              value: {{ .image }}
+            - name: SPARKJOB_IMAGEPULLSECRETS
+              value: {{ range $val := .imagePullSecrets }}{{ printf "%v " $val }}{{ end }}
+            - name: SPARKJOB_IMAGEPULLPOLICY
+              value: {{ .imagePullPolicy }}
+            - name: SPARKJOB_SERVICEACCOUNT
+              value: {{ .serviceAccount }}
+            - name: SPARKJOB_RESTARTPOLICY_TYPE
+              value: {{ .restartPolicy.type }}
+            - name: SPARKJOB_DRIVER_JAVAOPTIONS
+              value: {{ .driver.javaOptions }}
+            - name: SPARKJOB_EXECUTOR_JAVAOPTIONS
+              value: {{ .executor.javaOptions }}
+            - name: SPARKJOB_SPARKCONF
+              value: {{ range $val := $jobSparkConfs }}{{ printf "%v " $val }}{{ end }}
+          {{- end }}
+          ports:
+            - name: batch-service
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /jobs
+              port: batch-service
+          readinessProbe:
+            httpGet:
+              path: /jobs
+              port: batch-service
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
