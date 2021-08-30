@@ -5,10 +5,10 @@
 replicaCount: 1
 
 image:
-  repository: gitlab.planetrover.io:5050/sequoiadp/spark
+  repository: gitlab.planetrover.io:5050/sequoiadp/batch-job
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "tony1"
+  tag: "latest"
 
 imagePullSecrets: []
 nameOverride: ""
