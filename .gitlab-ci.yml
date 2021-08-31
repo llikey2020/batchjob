@@ -1,0 +1,77 @@
+include: 
+  - project: planetrover/templates
+    file: templates.yml
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: '$CI_COMMIT_BRANCH'
+
+.helm-job:
+  variables:
+    HELMCHART_PATH: batch-job/
+    HELMCHART_NAME: batch-job
+    HELMCHART_VERSION: 0.1.0
+
+default:
+  tags: ["cluster"]
+
+stages:
+  - lint
+  - build
+  - docker-build
+  - docker-publish
+  - package
+  - publish
+
+docker-lint:
+  stage: lint
+  extends:
+    - .dockerfile-lint
+
+go-lint:
+  stage: lint
+  extends:
+    - .go-lint
+
+helm-lint:
+  stage: lint
+  extends:
+    - .helm-lint
+  variables:
+    HELMCHART: batch-job
+
+go-build:
+  image: golang:1.16
+  stage: build
+  before_script:
+    - cd src
+  script:
+    - go build -o ../batch-service
+  artifacts:
+    paths:
+      - batch-service
+
+docker-build:
+  stage: docker-build
+  extends:
+    - .docker-build
+
+docker-push:
+  stage: docker-publish
+  needs: ["docker-build"]
+  extends:
+    - .docker-push-latest-branch-only
+
+helm-package:
+  stage: package
+  extends:
+    - .helm-package
+    - .helm-job
+  
+helm-upload:
+  stage: publish
+  needs: ["helm-package"]
+  extends:
+    - .helm-package-push
+    - .helm-job
