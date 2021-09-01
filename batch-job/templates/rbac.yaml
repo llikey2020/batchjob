@@ -1,0 +1,36 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: batch-job-role
+  namespace: {{ default .Release.Namespace .Values.sparkJob.namespace }}
+  labels:
+    {{- include "batch-job.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - sparkoperator.k8s.io
+  resources:
+  - sparkapplications
+  - sparkapplications/status
+  - scheduledsparkapplications
+  - scheduledsparkapplications/status
+  verbs:
+  - '*'
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: batch-job
+  namespace: {{ default .Release.Namespace .Values.sparkJob.namespace }}
+  labels:
+    {{- include "batch-job.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "batch-job.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: batch-job-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
