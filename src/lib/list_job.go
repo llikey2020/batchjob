@@ -1,26 +1,27 @@
 package batchjob
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os/exec"
+	"os"
 	"strconv"
-	"strings"
 	"context"
 
 	"github.com/gorilla/mux"
+	"github.com/olekukonko/tablewriter"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/kubernetes"
 )
 
 type batchJob struct {
-	Name       string `json:"Name"`
-	Id         string `json:"Id"`
-	SparkUISvc string `json:"SparkUISvc"`
-	Completed  bool   `json:"Completed"`
+	Name              string               `json:"Name"`
+	Id                string               `json:"Id"`
+	SparkUISvc        string               `json:"SparkUISvc"`
+	State             ApplicationStateType `json:"State"`
+	CreationTimestamp string               `json:"CreationTimestamp"`
+	Spec              SparkApplicationSpec `json:"Spec"`
 }
 
 type batchJobsResponse struct {
@@ -31,10 +32,10 @@ type batchJobsResponse struct {
 }
 
 type scheduledBatchJob struct {
-	Name              string                          `json:"name"`
-	CreationTimestamp string                          `json:"creationTimestamp"`
-	Spec              ScheduledSparkApplicationSpec   `json:"spec"`
-	Status            ScheduledSparkApplicationStatus `json:"status,omitempty"`
+	Name              string                          `json:"Name"`
+	CreationTimestamp string                          `json:"CreationTimestamp"`
+	Spec              ScheduledSparkApplicationSpec   `json:"Spec"`
+	Status            ScheduledSparkApplicationStatus `json:"Status,omitempty"`
 }
 
 type scheduledBatchJobsResponse struct {
@@ -67,52 +68,70 @@ func getJobFromId(id string) batchJob {
 	return batchJob{}
 }
 
-/**
-* parse `sparkctl list` output.
-* If onlyRunning is true: only return running jobs
-* Otherwise: return all jobs
-**/
-func parseJobs(jobs string, onlyRunning bool) (totalRunningJobs int, runningJobs []batchJob) {
-	fmt.Println("list jobs:\n", jobs)
-	totalRunningJobs = 0
-	runningJobs = make([]batchJob, 0)
-	for _, line := range strings.Split(strings.TrimSuffix(jobs, "\n"), "\n") {
-		if strings.HasPrefix(line, "|") {
-			job := strings.Split(strings.Trim(line, "|"), "|")
-			if strings.TrimSpace(job[0]) != "NAME" {
-				if strings.TrimSpace(job[2]) == "RUNNING" {
-					totalRunningJobs++
-					runningJobs = append(runningJobs, batchJob{Name: strings.TrimSpace(job[0]),
-						Id: strings.TrimSpace(job[1]), SparkUISvc: strings.TrimSpace(job[0]) + "-ui-svc", Completed: false})
-				} else if !onlyRunning {
-					totalRunningJobs++
-					runningJobs = append(runningJobs, batchJob{Name: strings.TrimSpace(job[0]),
-						Id: strings.TrimSpace(job[1]), SparkUISvc: strings.TrimSpace(job[0]) + "-ui-svc", Completed: true})
-				}
-			}
-		}
+func printJobs(jobs []SparkApplication) {
+	log.Println("list jobs:\n")
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Name", "Application Id", "State", "Submission Attempt Time", "Termination Time"})
+	for _, job := range jobs {
+		table.Append([]string{
+			string(job.ObjectMeta.Name),
+			string(job.Status.SparkApplicationID),
+			string(job.Status.AppState.State),
+			string(job.Status.LastSubmissionAttemptTime.String()),
+			string(job.Status.TerminationTime.String()),
+		})
 	}
-	return
+	table.Render()
 }
 
 func listJobs(onlyRunning bool) (response batchJobsResponse) {
-	cmd := exec.Command("sparkctl", "list", "--namespace="+SPARKJOB_CONFS["SPARKJOB_NAMESPACE"])
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil{
-		log.Println("ERROR:\n", err)
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = 1
-		response.ErrMessage = "ERROR:" + err.Error()
-		return
-	} else if errBuf.String() != "" {
-		log.Println("ERROR:\n", errBuf.String())
-		response.Status = 1
-		response.ErrMessage = "ERROR:" + errBuf.String()
+		response.ErrMessage = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Println("Unable to create an kubernetes client. err: ", err)
+		response.Status = 1
+		response.ErrMessage = "Unable to create an kubernetes client. err: " + err.Error()
+		return
+	}
+	res := SparkApplicationList{}
+	err = clientset.RESTClient().Get().
+		AbsPath("/apis/sparkoperator.k8s.io/v1beta2").
+		Namespace(SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]).
+		Resource("SparkApplications").
+		Do(context.TODO()).
+		Into(&res)
+	if err != nil {
+		log.Println("Unable to get SparkApplications. err: ", err)
+		response.Status = 1
+		response.ErrMessage = "Unable to get SparkApplications. err: " + err.Error()
+		return
+	}
+	// print jobs for logging purposes
+	printJobs(res.Items)
+
+	response.Jobs = []batchJob{}
+	for _, item := range res.Items {
+		var job batchJob
+		job.Name = item.ObjectMeta.Name
+		job.Id = item.Status.SparkApplicationID
+		job.SparkUISvc = item.Status.DriverInfo.WebUIServiceName
+		job.State = item.Status.AppState.State
+		job.CreationTimestamp = item.ObjectMeta.CreationTimestamp.String()
+		job.Spec = item.Spec
+		if onlyRunning && item.Status.AppState.State != "RUNNING" {
+			continue
+		}
+		response.Jobs = append(response.Jobs, job)
+	}
+
 	response.Status = 0
-	response.TotalJobs, response.Jobs = parseJobs(outBuf.String(), onlyRunning)
+	response.TotalJobs = len(response.Jobs)
 	return
 }
 
