@@ -12,11 +12,11 @@ import (
 )
 
 type batchJobRunOutput struct {
-	Id         string `json:"Id"`
-	Name       string `json:"Name"`
-	SparkUISvc string `json:"SparkUISvc"`
-	Completed  bool   `json:"Completed"`
-	Output     string `json:"Output"`
+	Id         string               `json:"Id"`
+	Name       string               `json:"Name"`
+	SparkUISvc string               `json:"SparkUISvc"`
+	State      ApplicationStateType `json:"State"`
+	Output     string               `json:"Output"`
 }
 
 type batchJobRunOutputResponse struct {
@@ -41,7 +41,7 @@ func logJob(jobId string) (response batchJobRunOutputResponse) {
 	response.Run.Id = job.Id
 	response.Run.Name = job.Name
 	response.Run.SparkUISvc = job.SparkUISvc
-	response.Run.Completed = job.Completed
+	response.Run.State = job.State
 	response.Run.Output = out.String()
 	return
 }
