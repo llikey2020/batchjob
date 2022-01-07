@@ -1,18 +1,15 @@
 package batchjob
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os/exec"
 	"strconv"
 	"time"
 	"context"
 	"sync"
-	"strings"
 
 	"gopkg.in/yaml.v2"
 
@@ -21,9 +18,16 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	serialYaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/robfig/cron"
 )
+
+const bufferSize = 1024
 
 var goRoutineCreated bool
 var nonRepeatJobsSync sync.Map
@@ -221,26 +225,61 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 		response.Output = "Unable to write batch job manifest to file. err: " + err.Error()
 		return
 	}
-	cmd := exec.Command("sparkctl", "create", sparkJobManifestFile, "--namespace="+SPARKJOB_CONFS["SPARKJOB_NAMESPACE"])
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil{
-		log.Println("ERROR:\n", err, errBuf.String())
+
+	// create the in-cluster config
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = 1
-		response.Output = "ERROR:" + err.Error() + errBuf.String()
-		return
-	} else if errBuf.String() != "" {
-		log.Println("ERROR:\n", errBuf.String())
-		response.Status = 1
-		response.Output = "ERROR:" + errBuf.String()
-		if strings.Contains(errBuf.String(), "already exists") {
-			response.Status = 409
-		}
+		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		log.Println("Unable to create an dynamic client. err: ", err)
+		response.Status = 1
+		response.Output = "Unable to create an dynamic client. err: " + err.Error()
+		return
+	}
+
+	// creating sparkapplication from yaml
+	deploymentRes := schema.GroupVersionResource{Group: "sparkoperator.k8s.io", Version: "v1beta2", Resource: "sparkapplications"}
+	// read spark job manifest yaml into a byte[]
+	content, err := ioutil.ReadFile(sparkJobManifestFile)
+	if err != nil {
+		log.Println("Unable to read batch job manifest to file. err: ", err)
+		response.Status = 1
+		response.Output = "Unable to read batch job manifest to file. err: " + err.Error()
+		return
+	}
+	// decode YAML contents into Unstructured struct which is used to create the deployment
+	var decUnstructured = serialYaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+	deployment := &unstructured.Unstructured{}
+    _, _, err = decUnstructured.Decode(content, nil, deployment)
+    if err != nil {
+        response.Status = 1
+		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
+		return
+    }
+
+	result, err := dynamicClient.Resource(deploymentRes).
+		Namespace(SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]).
+		Create(context.TODO(), deployment, metav1.CreateOptions{})
+	if errors.IsAlreadyExists(err) {
+		log.Println("Unable to Create SparkApplication. err: ", err.Error())
+		response.Status = 409
+		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
+		return
+	} else if err != nil {
+		log.Println("Reason for error", errors.ReasonForError(err))
+		log.Println("Unable to Create SparkApplication. err: ", err.Error())
+		response.Status = 1
+		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
+		return
+	}
+
 	response.Status = 0
-	response.Output = outBuf.String()
+	response.Output = "Created sparkapplication "+ result.GetName()
 	return
 }
 
@@ -309,6 +348,7 @@ func applyManifest(sparkJobManifestFile string, jobName string) (response servic
 	}
 	applyOptions := apply.NewApplyOptions(dynamicClient, discoveryClient)
 	if err := applyOptions.Apply(context.TODO(), content); err != nil {
+		log.Println("Reason for error", errors.ReasonForError(err))
 		log.Println("Unable to apply the batch job manifest to file. err: ", err)
 		response.Status = 1
 		response.Output = "Unable to read apply the batch job manifest to file. err: " + err.Error()

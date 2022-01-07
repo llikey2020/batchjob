@@ -1,12 +1,10 @@
 package batchjob
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os/exec"
 	"context"
 
 	"github.com/gorilla/mux"
@@ -15,24 +13,47 @@ import (
 )
 
 func deleteJob(jobName string) (response serviceResponse) {
-	cmd := exec.Command("sparkctl", "delete", jobName, "--namespace="+SPARKJOB_CONFS["SPARKJOB_NAMESPACE"])
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil{
-		log.Println("ERROR:\n", err)
+	// create the in-cluster config
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = 1
-		response.Output = "ERROR:" + err.Error()
-		return
-	} else if errBuf.String() != "" {
-		log.Println("ERROR:\n", errBuf.String())
-		response.Status = 404
-		response.Output = "ERROR:" + errBuf.String()
+		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Println("Unable to create an kubernetes client. err: ", err)
+		response.Status = 1
+		response.Output = "Unable to create an kubernetes client. err: " + err.Error()
+		return
+	}
+	// delete the job
+	var res rest.Result
+	res = clientset.RESTClient().Delete().
+				AbsPath("/apis/sparkoperator.k8s.io/v1beta2").
+				Namespace(SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]).
+				Resource("SparkApplications").
+				Name(jobName).
+				Do(context.TODO())
 
+	statusCode := 0
+	res = res.StatusCode(&statusCode)
+	if statusCode == 404 {
+		log.Println("SparkApplication with name "+ jobName +" does not exist. err: ", res.Error())
+		response.Status = 404
+		response.Output = "SparkApplication with name "+ jobName +" does not exist. err: " + res.Error().Error()
+		return
+	} else if res.Error() != nil {
+		log.Println("StatusCode:", statusCode)
+		log.Println("Unable to DELETE SparkApplication. err: ", res.Error())
+		response.Status = 1
+		response.Output = "Unable to DELETE SparkApplication. err: " + res.Error().Error()
+		return
+	}
+	
 	response.Status = 0
-	response.Output = outBuf.String()
+	response.Output = "Deleted job: " + jobName
 	return
 }
 
@@ -53,19 +74,6 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 		return
 	}
 	var res rest.Result
-	// check if scheduled job exists
-	res = clientset.RESTClient().Get().
-				AbsPath("/apis/sparkoperator.k8s.io/v1beta2").
-				Namespace(SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]).
-				Resource("ScheduledSparkApplications").
-				Name(jobName).
-				Do(context.TODO())
-	if res.Error() != nil {
-		log.Println("Scheduled job " + jobName + " does not exist")
-		response.Status = 404
-		response.Output = "Scheduled job " + jobName + " does not exist"
-		return
-	}
 	// delete the job
 	res = clientset.RESTClient().Delete().
 				AbsPath("/apis/sparkoperator.k8s.io/v1beta2").
@@ -73,7 +81,15 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 				Resource("ScheduledSparkApplications").
 				Name(jobName).
 				Do(context.TODO())
-	if res.Error() != nil {
+	statusCode := 0
+	res = res.StatusCode(&statusCode)
+	if statusCode == 404 {
+		log.Println("ScheduledSparkApplication with name "+ jobName +" does not exist. err: ", res.Error())
+		response.Status = 404
+		response.Output = "ScheduledSparkApplication with name "+ jobName +" does not exist. err: " + res.Error().Error()
+		return
+	} else if res.Error() != nil {
+		log.Println("StatusCode:", statusCode)
 		log.Println("Unable to DELETE ScheduledSparkApplication. err: ", res.Error())
 		response.Status = 1
 		response.Output = "Unable to DELETE ScheduledSparkApplication. err: " + res.Error().Error()
@@ -85,6 +101,10 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 	return
 }
 
+/**
+* handler for DELETE: /job/{name}
+* Creates a job
+**/
 func deleteBatchJob(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Hit delete job endpoint")
 	vars := mux.Vars(r)
@@ -93,7 +113,7 @@ func deleteBatchJob(w http.ResponseWriter, r *http.Request) {
 	if deleteJobResponse.Status == 1 {
 		log.Println("Error deleting job: " + deleteJobResponse.Output)
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Error deleting scheduled job: " + jobName + ", err: " + deleteJobResponse.Output))
+		w.Write([]byte("500 - Error deleting job: " + jobName + ", err: " + deleteJobResponse.Output))
 		return
 	} else if deleteJobResponse.Status == 404 {
 		log.Println("Error deleting job: " + jobName + ", err: " + deleteJobResponse.Output)
@@ -112,6 +132,10 @@ func deleteBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
+/**
+* handler for DELETE: /scheduledjob/{name}
+* Creates a job
+**/
 func deleteScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Hit delete scheduled job endpoint")
 	vars := mux.Vars(r)
