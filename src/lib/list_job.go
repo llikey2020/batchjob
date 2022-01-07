@@ -13,6 +13,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 type batchJob struct {
@@ -107,6 +108,7 @@ func listJobs(onlyRunning bool) (response batchJobsResponse) {
 		Do(context.TODO()).
 		Into(&res)
 	if err != nil {
+		log.Println("Reason for error", errors.ReasonForError(err))
 		log.Println("Unable to get SparkApplications. err: ", err)
 		response.Status = 1
 		response.ErrMessage = "Unable to get SparkApplications. err: " + err.Error()
@@ -158,6 +160,7 @@ func listScheduledJobs() (response scheduledBatchJobsResponse) {
 		Do(context.TODO()).
 		Into(&res)
 	if err != nil {
+		log.Println("Reason for error", errors.ReasonForError(err))
 		log.Println("Unable to get ScheduledSparkApplications. err: ", err)
 		response.Status = 1
 		response.ErrMessage = "Unable to get ScheduledSparkApplications. err: " + err.Error()
@@ -202,17 +205,26 @@ func getScheduledJob(jobName string) (response scheduledBatchJobResponse) {
 		Name(jobName).
 		Do(context.TODO()).
 		Into(&res)
-	if err != nil {
+	if errors.IsNotFound(err) {
 		log.Println("Unable to get ScheduledSparkApplication. err: ", err)
 		response.Status = 404
+		response.ErrMessage = "Unable to get ScheduledSparkApplication. err: " + err.Error()
+		return
+	} else if err != nil {
+		log.Println("Reason for error:", errors.ReasonForError(err))
+		log.Println("Unable to get ScheduledSparkApplication. err: ", err)
+		response.Status = 1
 		response.ErrMessage = "Unable to get ScheduledSparkApplication. err: " + err.Error()
 		return
 	}
 	var scheduledJob scheduledBatchJob
 	scheduledJob.Name = res.ObjectMeta.Name
-	scheduledJob.CreationTimestamp = res.ObjectMeta.CreationTimestamp.String()
+	scheduledJob.CreationTimestamp = res.ObjectMeta.GetCreationTimestamp().String()
+	log.Println("UNIX EPOCH", res.ObjectMeta.CreationTimestamp.Unix())
 	scheduledJob.Spec = res.Spec
 	scheduledJob.Status = res.Status
+	log.Println("UNIX EPOCH Lastrun", res.Status.LastRun.Unix())
+	log.Println("UNIX EPOCH NextRun", res.Status.NextRun.Unix())
 
 	response.Status = 0
 	response.ScheduledJob = scheduledJob
