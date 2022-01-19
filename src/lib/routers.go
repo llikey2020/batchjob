@@ -49,5 +49,7 @@ func HandleRequests() {
 	router.HandleFunc("/scheduledjobs", getScheduledBatchJobs).Methods("GET")
 	router.HandleFunc("/scheduledjob/{name}", getScheduledBatchJob).Methods("GET")
 	router.HandleFunc("/scheduledjob/{name}", deleteScheduledBatchJob).Methods("DELETE")
+	router.HandleFunc("/scheduledjob/{name}/suspend", suspendScheduledBatchJob).Methods("PATCH")
+	router.HandleFunc("/scheduledjob/{name}/resume", resumeScheduledBatchJob).Methods("PATCH")
 	log.Fatal(http.ListenAndServe(":8888", router))
 }
