@@ -2,7 +2,6 @@ package batchjob
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"context"
@@ -106,7 +105,7 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 * Creates a job
 **/
 func deleteBatchJob(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Hit delete job endpoint")
+	log.Println("Hit delete job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	deleteJobResponse := deleteJob(jobName)
@@ -137,7 +136,7 @@ func deleteBatchJob(w http.ResponseWriter, r *http.Request) {
 * Creates a job
 **/
 func deleteScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Hit delete scheduled job endpoint")
+	log.Println("Hit delete scheduled job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	deleteJobResponse := deleteScheduledJob(jobName)

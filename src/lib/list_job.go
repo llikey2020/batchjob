@@ -2,7 +2,6 @@ package batchjob
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +14,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/apimachinery/pkg/api/errors"
 )
+
+type sparkApplicationResponse struct {
+	Status     int              `json:"Status"`
+	SparkApp   SparkApplication `json:"SparkApp"`
+	ErrMessage string           `json:"ErrorMessage,omitempty"`
+}
 
 type batchJob struct {
 	Name              string               `json:"Name"`
@@ -39,6 +44,12 @@ type scheduledBatchJob struct {
 	Status            ScheduledSparkApplicationStatus `json:"Status,omitempty"`
 }
 
+type scheduledSparkApplicationResponse struct {
+	Status     int                       `json:"Status"`
+	SparkApp   ScheduledSparkApplication `json:"ScheduledSparkApp"`
+	ErrMessage string                    `json:"ErrorMessage,omitempty"`
+}
+
 type scheduledBatchJobsResponse struct {
 	Status        int                 `json:"Status"`
 	TotalJobs     int                 `json:"TotalJobs"`
@@ -50,6 +61,45 @@ type scheduledBatchJobResponse struct {
 	Status       int               `json:"Status"`
 	ScheduledJob scheduledBatchJob `json:"ScheduledJob"`
 	ErrMessage   string            `json:"ErrorMessage,omitempty"`
+}
+
+func getSparkApplication(jobName string) (response sparkApplicationResponse) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Println("Unable to create an in-cluster config. err: ", err)
+		response.Status = 1
+		return
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Println("Unable to create an kubernetes client. err: ", err)
+		response.Status = 1
+		return
+	}
+	res := SparkApplication{}
+	err = clientset.RESTClient().Get().
+		AbsPath("/apis/sparkoperator.k8s.io/v1beta2").
+		Namespace(SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]).
+		Resource("SparkApplications").
+		Name(jobName).
+		Do(context.TODO()).
+		Into(&res)
+	if errors.IsNotFound(err) {
+		log.Println("Unable to get SparkApplication. err: ", err)
+		response.Status = 404
+		response.ErrMessage = "Unable to get SparkApplication. err: " + err.Error()
+		return
+	} else if err != nil {
+		log.Println("Reason for error:", errors.ReasonForError(err))
+		log.Println("Unable to get SparkApplication. err: ", err)
+		response.Status = 1
+		response.ErrMessage = "Unable to get SparkApplication. err: " + err.Error()
+		return
+	}
+
+	response.Status = 0
+	response.SparkApp = res
+	return
 }
 
 /**
@@ -182,19 +232,17 @@ func listScheduledJobs() (response scheduledBatchJobsResponse) {
 	return
 }
 
-func getScheduledJob(jobName string) (response scheduledBatchJobResponse) {
+func getScheduledSparkApplication(jobName string) (response scheduledSparkApplicationResponse) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = 1
-		response.ErrMessage = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		log.Println("Unable to create an kubernetes client. err: ", err)
 		response.Status = 1
-		response.ErrMessage = "Unable to create an kubernetes client. err: " + err.Error()
 		return
 	}
 	res := ScheduledSparkApplication{}
@@ -217,14 +265,26 @@ func getScheduledJob(jobName string) (response scheduledBatchJobResponse) {
 		response.ErrMessage = "Unable to get ScheduledSparkApplication. err: " + err.Error()
 		return
 	}
+
+	response.Status = 0
+	response.SparkApp = res
+	return
+}
+
+func getScheduledJob(jobName string) (response scheduledBatchJobResponse) {
+	getSchedSparkAppResponse := getScheduledSparkApplication(jobName)
+	if getSchedSparkAppResponse.Status != 0 {
+		response.Status = getSchedSparkAppResponse.Status
+		response.ErrMessage = getSchedSparkAppResponse.ErrMessage
+		return
+	}
+	res := getSchedSparkAppResponse.SparkApp
+
 	var scheduledJob scheduledBatchJob
 	scheduledJob.Name = res.ObjectMeta.Name
 	scheduledJob.CreationTimestamp = res.ObjectMeta.GetCreationTimestamp().String()
-	log.Println("UNIX EPOCH", res.ObjectMeta.CreationTimestamp.Unix())
 	scheduledJob.Spec = res.Spec
 	scheduledJob.Status = res.Status
-	log.Println("UNIX EPOCH Lastrun", res.Status.LastRun.Unix())
-	log.Println("UNIX EPOCH NextRun", res.Status.NextRun.Unix())
 
 	response.Status = 0
 	response.ScheduledJob = scheduledJob
@@ -236,7 +296,7 @@ func getScheduledJob(jobName string) (response scheduledBatchJobResponse) {
 * get all jobs
 **/
 func getBatchJobs(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Hit list jobs endpoint")
+	log.Println("Hit list jobs endpoint")
 	var onlyRunning bool = false
 	if r.URL.Query().Get("running") != "" {
 		var err error
@@ -269,7 +329,7 @@ func getBatchJobs(w http.ResponseWriter, r *http.Request) {
 * get all scheduledjobs
 **/
 func getScheduledBatchJobs(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Hit list scheduled jobs endpoint")
+	log.Println("Hit list scheduled jobs endpoint")
 	listJobsResponse := listScheduledJobs()
 	if listJobsResponse.Status == 1 {
 		log.Println("Unable to get ScheduledSparkApplications: ", listJobsResponse.ErrMessage)
@@ -293,7 +353,7 @@ func getScheduledBatchJobs(w http.ResponseWriter, r *http.Request) {
 * get all scheduledjobs
 **/
 func getScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Hit get scheduled job endpoint")
+	log.Println("Hit get scheduled job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	getJobResponse := getScheduledJob(jobName)
@@ -347,7 +407,7 @@ func getRunsFromJobName(jobName string) []batchJob {
 * get all runs for a job with a given name
 **/
 func getBatchJobRuns(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Hit get job endpoint")
+	log.Println("Hit get job runs endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	runs := getRunsFromJobName(jobName)

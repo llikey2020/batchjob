@@ -2,7 +2,6 @@ package batchjob
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"context"
@@ -107,7 +106,7 @@ func logJob(jobId string) (response batchJobRunOutputResponse) {
 * get all jobs
 **/
 func getJobOutput(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Hit log job endpoint")
+	log.Println("Hit log job endpoint")
 	vars := mux.Vars(r)
 	jobId := vars["id"]
 	logJobResponse := logJob(jobId)

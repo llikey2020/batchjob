@@ -432,7 +432,7 @@ func nonRepeatScheduledJobCleanup() {
 * Creates a job
 **/
 func createBatchJob(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Hit create jobs endpoint")
+	log.Println("Hit create jobs endpoint")
 	decoder := json.NewDecoder(r.Body)
 	// Get request
 	var batchJobReq batchJobRequest
@@ -501,7 +501,7 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 * Creates a scheduled job
 **/
 func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Hit create jobs endpoint")
+	log.Println("Hit create jobs endpoint")
 	decoder := json.NewDecoder(r.Body)
 	// Get request
 	var batchJobReq batchJobRequest
