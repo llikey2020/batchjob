@@ -45,6 +45,7 @@ func HandleRequests() {
 	router.HandleFunc("/job/{name}", getBatchJobRuns).Methods("GET")
 	router.HandleFunc("/job/{name}", deleteBatchJob).Methods("DELETE")
 	router.HandleFunc("/job/{name}/{id}", getJobOutput).Methods("GET")
+	router.HandleFunc("/job/run", runBatchJob).Methods("POST")
 	router.HandleFunc("/scheduledjob", createScheduledBatchJob).Methods("POST")
 	router.HandleFunc("/scheduledjobs", getScheduledBatchJobs).Methods("GET")
 	router.HandleFunc("/scheduledjob/{name}", getScheduledBatchJob).Methods("GET")

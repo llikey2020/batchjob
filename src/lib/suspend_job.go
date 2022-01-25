@@ -35,12 +35,8 @@ func createSuspendScheduledBatchJobManifest(suspend bool) (job suspendScheduledB
 
 func suspendScheduledJob(jobName string, suspend bool) (response serviceResponse){
 	getJobResponse := getScheduledJob(jobName)
-	if getJobResponse.Status != 0 {
-		if getJobResponse.Status == 404 {
-			response.Status = http.StatusNotFound
-		} else {
-			response.Status = http.StatusInternalServerError
-		}
+	if getJobResponse.Status != http.StatusOK {
+		response.Status = getJobResponse.Status
 		log.Println("Unable to find ScheduledSparkApplication:" + getJobResponse.ErrMessage)
 		response.Output = getJobResponse.ErrMessage
 		return
