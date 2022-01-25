@@ -211,7 +211,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	sparkJobManifest, err := yaml.Marshal(&job)
 	if err != nil {
 		log.Println("Unable to encode batch job into yaml. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to encode batch job into yaml. err: " + err.Error()
 		return
 	}
@@ -221,7 +221,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
 	if err != nil {
 		log.Println("Unable to write batch job manifest to file. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to write batch job manifest to file. err: " + err.Error()
 		return
 	}
@@ -230,14 +230,14 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Println("Unable to create an in-cluster config. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		log.Println("Unable to create an dynamic client. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an dynamic client. err: " + err.Error()
 		return
 	}
@@ -248,7 +248,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	content, err := ioutil.ReadFile(sparkJobManifestFile)
 	if err != nil {
 		log.Println("Unable to read batch job manifest to file. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to read batch job manifest to file. err: " + err.Error()
 		return
 	}
@@ -257,7 +257,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	deployment := &unstructured.Unstructured{}
     _, _, err = decUnstructured.Decode(content, nil, deployment)
     if err != nil {
-        response.Status = 1
+        response.Status = http.StatusInternalServerError
 		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
 		return
     }
@@ -267,18 +267,18 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 		Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		log.Println("Unable to Create SparkApplication. err: ", err.Error())
-		response.Status = 409
+		response.Status = http.StatusConflict
 		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
 		return
 	} else if err != nil {
 		log.Println("Reason for error", errors.ReasonForError(err))
 		log.Println("Unable to Create SparkApplication. err: ", err.Error())
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
 		return
 	}
 
-	response.Status = 0
+	response.Status = http.StatusOK
 	response.Output = "Created sparkapplication "+ result.GetName()
 	return
 }
@@ -288,7 +288,7 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 	sparkJobManifest, err := yaml.Marshal(&job)
 	if err != nil {
 		log.Println("Unable to encode batch job into yaml. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to encode batch job into yaml. err: " + err.Error()
 		return
 	}
@@ -298,7 +298,7 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
 	if err != nil {
 		log.Println("Unable to write batch job manifest to file. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to write batch job manifest to file. err: " + err.Error()
 		return
 	}
@@ -320,21 +320,21 @@ func applyManifest(sparkJobManifestFile string, jobName string) (response servic
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Println("Unable to create an in-cluster config. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		log.Println("Unable to create an dynamic client. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an dynamic client. err: " + err.Error()
 		return
 	}
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
 		log.Println("Unable to create an discovery client. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an discovery client. err: " + err.Error()
 		return
 	}
@@ -342,7 +342,7 @@ func applyManifest(sparkJobManifestFile string, jobName string) (response servic
 	content, err := ioutil.ReadFile(sparkJobManifestFile)
 	if err != nil {
 		log.Println("Unable to read batch job manifest to file. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to read batch job manifest to file. err: " + err.Error()
 		return
 	}
@@ -350,12 +350,12 @@ func applyManifest(sparkJobManifestFile string, jobName string) (response servic
 	if err := applyOptions.Apply(context.TODO(), content); err != nil {
 		log.Println("Reason for error", errors.ReasonForError(err))
 		log.Println("Unable to apply the batch job manifest to file. err: ", err)
-		response.Status = 1
+		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to read apply the batch job manifest to file. err: " + err.Error()
 		return
 	}
 
-	response.Status = 0
+	response.Status = http.StatusOK
 	response.Output = "ScheduledSparkApplication " + jobName + " created"
 	return
 }
@@ -415,7 +415,7 @@ func nonRepeatScheduledJobCleanup() {
 				}
 				
 				response := applyManifest(sparkJobManifestFile, jobName)
-				if response.Status == 1 {
+				if response.Status == http.StatusInternalServerError {
 					log.Println("ERROR: Something when wrong when suspending the job", response.Output)
 					return true
 				}
@@ -473,15 +473,10 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 	createReq.Metadata = batchJobReq.Metadata
 	createReq.Spec = batchJobReq.Spec
 	createJobResponse := createJob(createReq)
-	if createJobResponse.Status == 1 {
-		log.Println("Error creating job: " + createJobResponse.Output)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - " + createJobResponse.Output))
-		return
-	} else if createJobResponse.Status == 409 {
-		log.Println("Error creating job: " + createJobResponse.Output)
-		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte("409 - " + createJobResponse.Output))
+	if createJobResponse.Status != http.StatusOK {
+		log.Println("Error creating job: ", createJobResponse.Output)
+		w.WriteHeader(createJobResponse.Status)
+		w.Write([]byte(strconv.Itoa(createJobResponse.Status) + " - Error creating job: " + createJobResponse.Output))
 		return
 	}
 	response, err = json.Marshal(createJobResponse)
@@ -555,19 +550,19 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var response []byte
-	//var err error
 	// ScheduledSparkApplication
 	log.Println("Creating ScheduledSparkApplication")
 	var createReq scheduledBatchJobManifest
 	createReq.Metadata = batchJobReq.Metadata
 	createJobResponse := createScheduledJob(createReq, batchJobReq.Spec, batchJobReq.Schedule, batchJobReq.OneRunScheduledJob)
 	// error handling createScheduledJob
-	if createJobResponse.Status == 1 {
-		log.Println("Error creating scheduled job: " + createJobResponse.Output)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - " + createJobResponse.Output))
+	if createJobResponse.Status != http.StatusOK {
+		log.Println("Error creating scheduled job: ", createJobResponse.Output)
+		w.WriteHeader(createJobResponse.Status)
+		w.Write([]byte(strconv.Itoa(createJobResponse.Status) + " - Error creating scheduled job: " + createJobResponse.Output))
 		return
 	}
+
 	response, err = json.Marshal(createJobResponse)
 	if err != nil {
 		log.Println("Failed to encode response", err)
