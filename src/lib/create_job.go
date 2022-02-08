@@ -28,6 +28,7 @@ import (
 )
 
 const bufferSize = 1024
+const defaultRunHistoryLimit = 5
 
 var goRoutineCreated bool
 var nonRepeatJobsSync sync.Map
@@ -129,6 +130,7 @@ type batchJobSchedule struct {
 	Suspend                         bool
 	SuccessfulRunHistoryLimit       int32
 	FailedRunHistoryLimit           int32
+	RunHistoryLimit                 int32
 }
 
 type batchJobRequest struct {
@@ -188,8 +190,17 @@ func createScheduledBatchJobSpec(jobSpecTemplate *scheduledBatchJobSpec, spec ba
 	createBatchJobSpec(&jobSpecTemplate.Template)
 	jobSpecTemplate.Suspend = schedule.Suspend
 	jobSpecTemplate.ConcurrencyPolicy = schedule.ConcurrencyPolicy
-	jobSpecTemplate.SuccessfulRunHistoryLimit = schedule.SuccessfulRunHistoryLimit
-	jobSpecTemplate.FailedRunHistoryLimit = schedule.FailedRunHistoryLimit
+	if schedule.RunHistoryLimit != 0 {
+		jobSpecTemplate.SuccessfulRunHistoryLimit = schedule.RunHistoryLimit
+		jobSpecTemplate.FailedRunHistoryLimit = schedule.RunHistoryLimit
+	} else {
+		if jobSpecTemplate.SuccessfulRunHistoryLimit = schedule.SuccessfulRunHistoryLimit; schedule.SuccessfulRunHistoryLimit == 0 {
+			jobSpecTemplate.SuccessfulRunHistoryLimit = defaultRunHistoryLimit
+		}
+		if jobSpecTemplate.FailedRunHistoryLimit = schedule.FailedRunHistoryLimit; schedule.FailedRunHistoryLimit == 0 {
+			jobSpecTemplate.FailedRunHistoryLimit = defaultRunHistoryLimit
+		}
+	}
 }
 
 func createBatchJobManifest(job *batchJobManifest) {
@@ -533,6 +544,7 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("400 - Missing schedule parameters: concurrencyPolicy"))
 		return
 	}
+
 	// error 400 for invalid format and input
 	_, err := cron.ParseStandard(batchJobReq.Schedule.CronSchedule)
 	if err != nil {
@@ -546,6 +558,16 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		log.Println("Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 - Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace"))
+		return
+	} else if batchJobReq.Schedule.RunHistoryLimit < 0 || batchJobReq.Schedule.SuccessfulRunHistoryLimit < 0 || batchJobReq.Schedule.FailedRunHistoryLimit < 0 {
+		log.Println("Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("400 - Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0"))
+		return
+	} else if batchJobReq.Schedule.RunHistoryLimit != 0 && (batchJobReq.Schedule.SuccessfulRunHistoryLimit != 0 || batchJobReq.Schedule.FailedRunHistoryLimit != 0) {
+		log.Println("Not allowed to set RunHistoryLimit and (SuccessfulRunHistoryLimit + FailedRunHistoryLimit). Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit + FailedRunHistoryLimit)")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("400 - Not allowed to set RunHistoryLimit and (SuccessfulRunHistoryLimit + FailedRunHistoryLimit). Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit + FailedRunHistoryLimit)"))
 		return
 	}
 
