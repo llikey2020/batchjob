@@ -26,12 +26,12 @@ type sparkApplicationResponse struct {
 }
 
 type batchJob struct {
-	Name              string               `json:"Name"`
-	Id                string               `json:"Id"`
-	SparkUISvc        string               `json:"SparkUISvc"`
-	State             ApplicationStateType `json:"State"`
-	CreationTimestamp string               `json:"CreationTimestamp"`
-	Spec              SparkApplicationSpec `json:"Spec"`
+	Name              string                `json:"Name"`
+	Id                string                `json:"Id"`
+	SparkUISvc        string                `json:"SparkUISvc"`
+	State             ApplicationStateType  `json:"State"`
+	CreationTimestamp string                `json:"CreationTimestamp"`
+	Spec              *SparkApplicationSpec `json:"Spec,omitempty"`
 }
 
 type batchJobsResponse struct {
@@ -46,6 +46,7 @@ type scheduledBatchJob struct {
 	CreationTimestamp string                          `json:"CreationTimestamp"`
 	Spec              ScheduledSparkApplicationSpec   `json:"Spec"`
 	Status            ScheduledSparkApplicationStatus `json:"Status,omitempty"`
+	PastRuns          []batchJob                      `json:"PastRuns,omitempty"`
 }
 
 type scheduledSparkApplicationResponse struct {
@@ -156,11 +157,48 @@ func readSparkApplicationsIntoBatchJob(items []SparkApplication, onlyRunning boo
 		job.Id = item.Status.SparkApplicationID
 		job.SparkUISvc = item.Status.DriverInfo.WebUIServiceName
 		job.State = item.Status.AppState.State
-		job.CreationTimestamp = item.ObjectMeta.CreationTimestamp.String()
-		job.Spec = item.Spec
+		job.CreationTimestamp = item.ObjectMeta.GetCreationTimestamp().String()
+		job.Spec = &item.Spec
 		jobs = append(jobs, job)
 	}
 	return jobs
+}
+
+func readScheduledSparkApplicationsIntoScheduledBatchJob(items []ScheduledSparkApplication) []scheduledBatchJob {
+	scheduledJobs := []scheduledBatchJob{}
+	for _, item := range items {
+		var scheduledJob scheduledBatchJob
+		scheduledJob.Name = item.ObjectMeta.Name
+		scheduledJob.CreationTimestamp = item.ObjectMeta.GetCreationTimestamp().String()
+		scheduledJob.Spec = item.Spec
+		scheduledJob.Status = item.Status
+		// get and order past runs
+		runHistoryLimit := *item.Spec.SuccessfulRunHistoryLimit
+		if *item.Spec.FailedRunHistoryLimit < *item.Spec.SuccessfulRunHistoryLimit{
+			runHistoryLimit = *item.Spec.FailedRunHistoryLimit
+		}
+		pastRunNames := append(scheduledJob.Status.PastSuccessfulRunNames, scheduledJob.Status.PastFailedRunNames...)
+		pastRunSparkApps := getPastScheduledJobRuns(pastRunNames)
+		sort.Slice(pastRunSparkApps, func(i, j int) bool {
+			t1 := pastRunSparkApps[i].ObjectMeta.GetCreationTimestamp()
+			t2 := pastRunSparkApps[j].ObjectMeta.GetCreationTimestamp()
+			return t1.Before(&t2)
+		})
+		if int32(len(pastRunSparkApps)) > runHistoryLimit {
+			pastRunSparkApps = pastRunSparkApps[int32(len(pastRunSparkApps)) - runHistoryLimit:]
+		}
+		for _, item := range pastRunSparkApps {
+			var job batchJob
+			job.Name = item.ObjectMeta.Name
+			job.Id = item.Status.SparkApplicationID
+			job.SparkUISvc = item.Status.DriverInfo.WebUIServiceName
+			job.State = item.Status.AppState.State
+			job.CreationTimestamp = item.ObjectMeta.GetCreationTimestamp().String()
+			scheduledJob.PastRuns = append(scheduledJob.PastRuns, job)
+		}
+		scheduledJobs = append(scheduledJobs, scheduledJob)
+	}
+	return scheduledJobs
 }
 
 func listJobs(onlyRunning bool, noRuns bool) (response batchJobsResponse) {
@@ -201,6 +239,17 @@ func listJobs(onlyRunning bool, noRuns bool) (response batchJobsResponse) {
 	return
 }
 
+func getPastScheduledJobRuns(pastRunNames []string) (sparkAppList []SparkApplication) {
+	for _, name := range pastRunNames {
+		sparkAppResponse := getSparkApplication(name)
+		if sparkAppResponse.Status != http.StatusOK {
+			continue
+		}
+		sparkAppList = append(sparkAppList, sparkAppResponse.SparkApp)
+	}
+	return
+}
+
 func listScheduledJobs() (response scheduledBatchJobsResponse) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -231,15 +280,7 @@ func listScheduledJobs() (response scheduledBatchJobsResponse) {
 		return
 	}
 	// get only relevant data and metadata into result
-	response.ScheduledJobs = []scheduledBatchJob{}
-	for _, item := range res.Items {
-		var scheduledJob scheduledBatchJob
-		scheduledJob.Name = item.ObjectMeta.Name
-		scheduledJob.CreationTimestamp = item.ObjectMeta.CreationTimestamp.String()
-		scheduledJob.Spec = item.Spec
-		scheduledJob.Status = item.Status
-		response.ScheduledJobs = append(response.ScheduledJobs, scheduledJob)
-	}
+	response.ScheduledJobs = readScheduledSparkApplicationsIntoScheduledBatchJob(res.Items)
 
 	response.Status = http.StatusOK
 	response.TotalJobs = len(response.ScheduledJobs)
@@ -295,12 +336,7 @@ func getScheduledJob(jobName string) (response scheduledBatchJobResponse) {
 		return
 	}
 	res := getSchedSparkAppResponse.SparkApp
-
-	var scheduledJob scheduledBatchJob
-	scheduledJob.Name = res.ObjectMeta.Name
-	scheduledJob.CreationTimestamp = res.ObjectMeta.GetCreationTimestamp().String()
-	scheduledJob.Spec = res.Spec
-	scheduledJob.Status = res.Status
+	scheduledJob := readScheduledSparkApplicationsIntoScheduledBatchJob([]ScheduledSparkApplication{res})[0]
 
 	response.Status = http.StatusOK
 	response.ScheduledJob = scheduledJob
@@ -453,10 +489,8 @@ func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batch
 	}
 	// sort SparkApplications by ascending creation time
 	sort.Slice(sparkAppList, func(i, j int) bool {
-		var t1 metav1.Time
-		var t2 metav1.Time
-		t1 = sparkAppList[i].ObjectMeta.GetCreationTimestamp()
-		t2 = sparkAppList[j].ObjectMeta.GetCreationTimestamp()
+		t1 := sparkAppList[i].ObjectMeta.GetCreationTimestamp()
+		t2 := sparkAppList[j].ObjectMeta.GetCreationTimestamp()
 		return t1.Before(&t2)
 	})
 	response.Jobs = readSparkApplicationsIntoBatchJob(sparkAppList, false, false)
@@ -474,8 +508,8 @@ func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batch
 		job.Id = sparkApp.Status.SparkApplicationID
 		job.SparkUISvc = sparkApp.Status.DriverInfo.WebUIServiceName
 		job.State = sparkApp.Status.AppState.State
-		job.CreationTimestamp = sparkApp.ObjectMeta.CreationTimestamp.String()
-		job.Spec = sparkApp.Spec
+		job.CreationTimestamp = sparkApp.ObjectMeta.GetCreationTimestamp().String()
+		job.Spec = &sparkApp.Spec
 		response.Jobs = append([]batchJob{job}, response.Jobs...)
 	}
 
