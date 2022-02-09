@@ -158,7 +158,8 @@ func readSparkApplicationsIntoBatchJob(items []SparkApplication, onlyRunning boo
 		job.SparkUISvc = item.Status.DriverInfo.WebUIServiceName
 		job.State = item.Status.AppState.State
 		job.CreationTimestamp = item.ObjectMeta.GetCreationTimestamp().String()
-		job.Spec = &item.Spec
+		sparkAppSpec := item.Spec
+		job.Spec = &sparkAppSpec
 		jobs = append(jobs, job)
 	}
 	return jobs
@@ -187,13 +188,13 @@ func readScheduledSparkApplicationsIntoScheduledBatchJob(items []ScheduledSparkA
 		if int32(len(pastRunSparkApps)) > runHistoryLimit {
 			pastRunSparkApps = pastRunSparkApps[int32(len(pastRunSparkApps)) - runHistoryLimit:]
 		}
-		for _, item := range pastRunSparkApps {
+		for _, runItem := range pastRunSparkApps {
 			var job batchJob
-			job.Name = item.ObjectMeta.Name
-			job.Id = item.Status.SparkApplicationID
-			job.SparkUISvc = item.Status.DriverInfo.WebUIServiceName
-			job.State = item.Status.AppState.State
-			job.CreationTimestamp = item.ObjectMeta.GetCreationTimestamp().String()
+			job.Name = runItem.ObjectMeta.Name
+			job.Id = runItem.Status.SparkApplicationID
+			job.SparkUISvc = runItem.Status.DriverInfo.WebUIServiceName
+			job.State = runItem.Status.AppState.State
+			job.CreationTimestamp = runItem.ObjectMeta.GetCreationTimestamp().String()
 			scheduledJob.PastRuns = append(scheduledJob.PastRuns, job)
 		}
 		scheduledJobs = append(scheduledJobs, scheduledJob)
