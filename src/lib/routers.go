@@ -41,7 +41,6 @@ func HandleRequests() {
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/jobs", getBatchJobs).Methods("GET")
 	router.HandleFunc("/job", createBatchJob).Methods("POST")
-	// for getting all runs of a batch job, however currently re-runs not supported
 	router.HandleFunc("/job/{name}", getBatchJobRuns).Methods("GET")
 	router.HandleFunc("/job/{name}", deleteBatchJob).Methods("DELETE")
 	router.HandleFunc("/job/{name}/{id}", getJobOutput).Methods("GET")

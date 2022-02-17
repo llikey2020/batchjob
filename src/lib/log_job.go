@@ -14,20 +14,32 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 )
 
+// batchJobRunOutput holds the fields of a batch job outputted to the user.
 type batchJobRunOutput struct {
+	// Id is Spark Application ID of a batch job.
 	Id         string               `json:"Id"`
+	// Name of a batch job.
 	Name       string               `json:"Name"`
+	// SparkUISvc is the spark UI name of the job.
 	SparkUISvc string               `json:"SparkUISvc"`
+	// State is current state of the job.
 	State      ApplicationStateType `json:"State"`
+	// Output is the output of the job run.
 	Output     string               `json:"Output"`
 }
 
+// batchJobRunOutputResponse holds status and fields of a batch job output to the user.
 type batchJobRunOutputResponse struct {
+	// Status is an HTTP status code returned to the user for their request.
 	Status     int               `json:"Status"`
+	// Run is information on the batch job and it's output
 	Run        batchJobRunOutput `json:"Run"`
+	// ErrMessage is an error message if the user request fails.
 	ErrMessage string            `json:"ErrorMessage,omitempty"`
 }
 
+// logJob gets a SparkApplication by SparkApplicationID and gets the logs of the driver for the SparkApplication.
+// Returns job driver log output, state, and sparkUISvc.
 func logJob(jobId string) (response batchJobRunOutputResponse) {
 	job := getJobFromId(jobId)
 	jobName := job.Name
@@ -102,10 +114,9 @@ func logJob(jobId string) (response batchJobRunOutputResponse) {
 	return
 }
 
-/**
-* handler for GET: /job/{name}/{id}
-* get all jobs
-**/
+// getJobOutput is the handler for GET: /job/{name}/{id}
+// Will take the name of a job/SparkApplication and Spark Application ID in URL.
+// Returns the SparkUISvc, State, and log output of the job's driver.
 func getJobOutput(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit log job endpoint")
 	vars := mux.Vars(r)
