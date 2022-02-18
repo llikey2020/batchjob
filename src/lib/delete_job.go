@@ -12,6 +12,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// deleteJob deletes a job with the given jobName. A job is represented by the SparkApplication CRD.
+// It checks for a SparkApplication with name jobName, then deletes the object from the cluster.
+// Returns a response with a status code and message depending on the status code.
 func deleteJob(jobName string) (response serviceResponse) {
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
@@ -74,6 +77,9 @@ func deleteJob(jobName string) (response serviceResponse) {
 	return
 }
 
+// deleteScheduledJob deletes a scheduled job with the given jobName. A scheduled job is represented by the ScheduledSparkApplication CRD.
+// It checks for a ScheduledSparkApplication with name jobName, then deletes the object from the cluster.
+// Returns a response with a status code and message depending on the status code.
 func deleteScheduledJob(jobName string) (response serviceResponse) {
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
@@ -118,10 +124,10 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 	return
 }
 
-/**
-* handler for DELETE: /job/{name}
-* Creates a job
-**/
+// deleteBatchJob is the handler for DELETE: /job/{name}
+// It deletes a batch job with the given name in the URL by deleting a SparkApplication with the same name.
+// Writes a response with status and message on success.
+// On failure, writes an error message in response.
 func deleteBatchJob(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit delete job endpoint")
 	vars := mux.Vars(r)
@@ -145,10 +151,10 @@ func deleteBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-/**
-* handler for DELETE: /scheduledjob/{name}
-* Creates a job
-**/
+// deleteScheduledBatchJob is the handler for DELETE: /scheduledjob/{name}
+// It deletes a scheduled batch job with the given name in the URL by deleting a ScheduledSparkApplication with the same name.
+// Writes a response with status and message on success.
+// On failure, writes an error message in response.
 func deleteScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit delete scheduled job endpoint")
 	vars := mux.Vars(r)

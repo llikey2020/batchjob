@@ -19,56 +19,97 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// sparkApplicationResponse holds status and SparkApplication object outputted as response to user.
+// ErrMessage contains an error message if getting a SparkApplication fails.
 type sparkApplicationResponse struct {
+	// Status is an HTTP status code returned to the user for their request.
 	Status     int              `json:"Status"`
+	// SparkApp is a SparkApplication object the user requests.
 	SparkApp   SparkApplication `json:"SparkApp"`
+	// ErrMessage is an error message if the user request fails.
 	ErrMessage string           `json:"ErrorMessage,omitempty"`
 }
 
+// batchJob holds fields of a batch job outputted in response to user getting batch job(s).
 type batchJob struct {
+	// Name of a batch job
 	Name              string                `json:"Name"`
+	// Id is Spark Application ID of a batch job.
 	Id                string                `json:"Id"`
+	// SparkUISvc is the spark UI name of the job.
 	SparkUISvc        string                `json:"SparkUISvc"`
+	// State is current state of the job.
 	State             ApplicationStateType  `json:"State"`
+	// CreationTimestamp is timestamp of when the job was created.
 	CreationTimestamp string                `json:"CreationTimestamp"`
+	// Spec is the spec of the SparkApplication object representing the batch job.
 	Spec              *SparkApplicationSpec `json:"Spec,omitempty"`
 }
 
+// batchJobsResponse holds status, number of jobs, and batch jobs output as response to getting batch jobs.
+// ErrMessage contains an error message if getting batch jobs fails.
 type batchJobsResponse struct {
+	// Status is an HTTP status code returned to the user for their request.
 	Status     int        `json:"Status"`
 	TotalJobs  int        `json:"TotalJobs"`
+	// Jobs is a list of batch jobs on the cluster namespace.
 	Jobs       []batchJob `json:"Jobs"`
+	// ErrMessage is an error message if the user request fails.
 	ErrMessage string     `json:"ErrorMessage,omitempty"`
 }
 
+// scheduledBatchJob holds fields of a scheduled batch job outputted in response to user getting scheduled batch job(s).
 type scheduledBatchJob struct {
+	// Name of a scheduled batch job.
 	Name              string                          `json:"Name"`
+	// CreationTimestamp is timestamp of when the job was created.
 	CreationTimestamp string                          `json:"CreationTimestamp"`
+	// Spec is the spec of the ScheduledSparkApplication object representing the scheduled batch job.
 	Spec              ScheduledSparkApplicationSpec   `json:"Spec"`
+	// Status is the status of the scheduled batch job.
 	Status            ScheduledSparkApplicationStatus `json:"Status,omitempty"`
+	// PastRuns is a list of the past job runs of a scheduled batch jobs.
 	PastRuns          []batchJob                      `json:"PastRuns,omitempty"`
 }
 
+// scheduledSparkApplicationResponse holds status and ScheduledSparkApplication object outputted as response to user.
+// ErrMessage contains an error message if getting a ScheduledSparkApplication fails.
 type scheduledSparkApplicationResponse struct {
+	// Status is an HTTP status code returned to the user for their request.
 	Status     int                       `json:"Status"`
+	// SparkApp is a ScheduledSparkApplication object the user requests.
 	SparkApp   ScheduledSparkApplication `json:"ScheduledSparkApp"`
+	// ErrMessage is an error message if the user request fails.
 	ErrMessage string                    `json:"ErrorMessage,omitempty"`
 }
 
+// scheduledBatchJobsResponse holds status, number of jobs, and scheduled batch jobs outputted as response to getting scheduled batch jobs.
+// ErrMessage contains an error message if getting scheduled batch jobs fails. 
 type scheduledBatchJobsResponse struct {
+	// Status is an HTTP status code returned to the user for their request.
 	Status        int                 `json:"Status"`
 	TotalJobs     int                 `json:"TotalJobs"`
+	// ScheduledJobs is a list of scheduled batch jobs on the cluster namespace.
 	ScheduledJobs []scheduledBatchJob `json:"ScheduledJobs"`
+	// ErrMessage is an error message if the user request fails.
 	ErrMessage    string              `json:"ErrorMessage,omitempty"`
 }
 
+// scheduledBatchJobResponse status, number of jobs, and scheduled batch job outputted as response to getting scheduled batch job.
+// ErrMessage contains an error message if getting a scheduled batch job fails.
 type scheduledBatchJobResponse struct {
+	// Status is an HTTP status code returned to the user for their request.
 	Status       int               `json:"Status"`
+	// ScheduledJobs is a scheduled batch job on the cluster namespace.
 	ScheduledJob scheduledBatchJob `json:"ScheduledJob"`
+	// ErrMessage is an error message if the user request fails.
 	ErrMessage   string            `json:"ErrorMessage,omitempty"`
 }
 
+// getSparkApplication gets the SparkApplication object on the current cluster and namespace.
+// Returns a response with a SparkApplication object with name jobName, or an error message if unable to get the SparkApplication.
 func getSparkApplication(jobName string) (response sparkApplicationResponse) {
+	// get config and clientset
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Println("Unable to create an in-cluster config. err: ", err)
@@ -83,6 +124,7 @@ func getSparkApplication(jobName string) (response sparkApplicationResponse) {
 		response.ErrMessage = "Unable to create an kubernetes client. err: " + err.Error()
 		return
 	}
+	// get SparkApplication using the rest client
 	res := SparkApplication{}
 	err = clientset.RESTClient().Get().
 		AbsPath("/apis/sparkoperator.k8s.io/v1beta2").
@@ -109,11 +151,9 @@ func getSparkApplication(jobName string) (response sparkApplicationResponse) {
 	return
 }
 
-/**
-* get list for runs for job with name: jobName
-* To-Do: When re-runs for single job is supported,
-* 		 this function needs to correctly support getting list of all runs for a job
-**/
+// getJobFromId gets a batch job by Spark Application Id.
+// Returns the batch job with the given Spark Application Id.
+// If SparkApplication with given Id can't be found, returns an empty batchJob
 func getJobFromId(id string) batchJob {
 	log.Println("getting job with id: ", id)
 	allJobRes := listJobs(false, false)
@@ -126,6 +166,9 @@ func getJobFromId(id string) batchJob {
 	return batchJob{}
 }
 
+// printJobs prints a table of the jobs/SparkApplications given.
+// The table headers are "Name", "Application Id", "State", "Submission Attempt Time", and "Termination Time".
+// Output of this table can be seen in the batch job service pod logs.
 func printJobs(jobs []SparkApplication) {
 	log.Println("list jobs:\n")
 	table := tablewriter.NewWriter(os.Stdout)
@@ -142,6 +185,10 @@ func printJobs(jobs []SparkApplication) {
 	table.Render()
 }
 
+// readSparkApplicationsIntoBatchJob takes SparkApplications and puts them into into a list of batchJob items.
+// Essentially acts to get certain fields in SparkApplication for the user into batchJob.
+// onlyRunning set to true will make this return batch jobs in the RUNNING state only.
+// noJobRuns set to true will make this exclude returning batch job runs (SparkApplication created by run job endpoint)
 func readSparkApplicationsIntoBatchJob(items []SparkApplication, onlyRunning bool, noJobRuns bool) []batchJob {
 	jobs := []batchJob{}
 	for _, item := range items {
@@ -165,6 +212,8 @@ func readSparkApplicationsIntoBatchJob(items []SparkApplication, onlyRunning boo
 	return jobs
 }
 
+// readScheduledSparkApplicationsIntoScheduledBatchJob takes ScheduledSparkApplications and puts them into into a list of scheduledBatchJob items.
+// Essentially acts to get certain fields in ScheduledSparkApplication for the user into scheduledBatchJob.
 func readScheduledSparkApplicationsIntoScheduledBatchJob(items []ScheduledSparkApplication) []scheduledBatchJob {
 	scheduledJobs := []scheduledBatchJob{}
 	for _, item := range items {
@@ -180,11 +229,13 @@ func readScheduledSparkApplicationsIntoScheduledBatchJob(items []ScheduledSparkA
 		}
 		pastRunNames := append(scheduledJob.Status.PastSuccessfulRunNames, scheduledJob.Status.PastFailedRunNames...)
 		pastRunSparkApps := getPastScheduledJobRuns(pastRunNames)
+		// sort jobs by creation time
 		sort.Slice(pastRunSparkApps, func(i, j int) bool {
 			t1 := pastRunSparkApps[i].ObjectMeta.GetCreationTimestamp()
 			t2 := pastRunSparkApps[j].ObjectMeta.GetCreationTimestamp()
 			return t1.Before(&t2)
 		})
+		// limit by the runHistoryLimit, the amount of jobs returned
 		if int32(len(pastRunSparkApps)) > runHistoryLimit {
 			pastRunSparkApps = pastRunSparkApps[int32(len(pastRunSparkApps)) - runHistoryLimit:]
 		}
@@ -202,6 +253,9 @@ func readScheduledSparkApplicationsIntoScheduledBatchJob(items []ScheduledSparkA
 	return scheduledJobs
 }
 
+// listJobs gets SparkApplications, gets the relevant information and puts them into batchJob structs.
+// onlyRunning set to true will make this return batch jobs in the RUNNING state only.
+// noJobRuns set to true will make this exclude returning batch job runs (SparkApplication created by run job endpoint)
 func listJobs(onlyRunning bool, noRuns bool) (response batchJobsResponse) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -240,6 +294,7 @@ func listJobs(onlyRunning bool, noRuns bool) (response batchJobsResponse) {
 	return
 }
 
+// getPastScheduledJobRuns given a list of run names (i.e SparkApplication names), and gets a list of SparkApplication.
 func getPastScheduledJobRuns(pastRunNames []string) (sparkAppList []SparkApplication) {
 	for _, name := range pastRunNames {
 		sparkAppResponse := getSparkApplication(name)
@@ -251,6 +306,7 @@ func getPastScheduledJobRuns(pastRunNames []string) (sparkAppList []SparkApplica
 	return
 }
 
+// listScheduledJobs gets ScheduledSparkApplication, and puts them into scheduledBatchJob structs.
 func listScheduledJobs() (response scheduledBatchJobsResponse) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -288,6 +344,7 @@ func listScheduledJobs() (response scheduledBatchJobsResponse) {
 	return
 }
 
+// getScheduledSparkApplication gets a ScheduledSparkApplication with the name jobName on the cluster and namespace.
 func getScheduledSparkApplication(jobName string) (response scheduledSparkApplicationResponse) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -329,6 +386,8 @@ func getScheduledSparkApplication(jobName string) (response scheduledSparkApplic
 	return
 }
 
+// getScheduledJob gets a ScheduledSparkApplication with name jobName.
+// Returns a scheduledBatchJob which contains data from a ScheduledSparkApplication with name as jobName.
 func getScheduledJob(jobName string) (response scheduledBatchJobResponse) {
 	getSchedSparkAppResponse := getScheduledSparkApplication(jobName)
 	if getSchedSparkAppResponse.Status != http.StatusOK {
@@ -344,10 +403,10 @@ func getScheduledJob(jobName string) (response scheduledBatchJobResponse) {
 	return
 }
 
-/**
-* handler for GET: /jobs
-* get all jobs
-**/
+// getBatchJobs is the handler for GET: /jobs
+// It gets SparkApplications (that don't have the sparkAppType=RunSparkAppType label) and reads each SparkApplication into batchJob type.
+// Writes a response with a list of batch jobs.
+// On failure, writes an error message in response.
 func getBatchJobs(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit list jobs endpoint")
 	var onlyRunning bool = false
@@ -382,6 +441,10 @@ func getBatchJobs(w http.ResponseWriter, r *http.Request) {
 * handler for GET: /scheduledjobs
 * get all scheduledjobs
 **/
+// getScheduledBatchJobs is the handler for GET: /scheduledjobs
+// It gets ScheduledSparkApplications and reads each ScheduledSparkApplication into scheduledBatchJob type.
+// Writes a response with a list of scheduled batch jobs.
+// On failure, writes an error message in response.
 func getScheduledBatchJobs(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit list scheduled jobs endpoint")
 	listJobsResponse := listScheduledJobs()
@@ -403,10 +466,10 @@ func getScheduledBatchJobs(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-/**
-* handler for GET: /scheduledjob/{name}
-* get all scheduledjobs
-**/
+// getScheduledBatchJobs is the handler for GET: /scheduledjob/{name}
+// It gets a ScheduledSparkApplication with the given name and reads it into a scheduledBatchJob type.
+// Writes a response with a scheduled batch job.
+// On failure, writes an error message in response.
 func getScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit get scheduled job endpoint")
 	vars := mux.Vars(r)
@@ -430,15 +493,18 @@ func getScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
+// batchJobRunsResponse holds fields for response to getting runs of a job.
 type batchJobRunsResponse struct {
 	Status  int        `json:"Status"`
 	JobName string     `json:"JobName"`
 	Runs    []batchJob `json:"Runs"`
 }
 
-/**
-* get list for runs for job with name: jobName
-**/
+// getRunsFromJobName will get runs of a job with jobName.
+// Runs are represented as SparkApplication objects in the k8s cluster with two labels: originalJobName and sparkAppType.
+// Get runs by getting SparkApplication objects labels originalJobName=jobName and sparkAppType=RunSparkAppType.
+// If includeOriginalJob = true, will include the job with name = jobName in the list of runs returned.
+// Returns a list of batchJob representing the runs in chronological order of creation.
 func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batchJobsResponse) {
 	log.Println("getting job with name: ", jobName)
 	// use dynamic client and LabelSelector in ListOptions
@@ -519,10 +585,10 @@ func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batch
 	return 
 }
 
-/**
-* handler for GET: /job/{name}
-* get all runs for a job with a given name
-**/
+// getBatchJobRuns is the handler for GET: /job/{name}
+// It gets all created runs of the batch job with the name in the request URL.
+// Writes a response with a list of runs.
+// On failure, writes an error message in response.
 func getBatchJobRuns(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit get job runs endpoint")
 	vars := mux.Vars(r)

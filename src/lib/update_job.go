@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// updateBatchJobSpecRestartPolicy holds fields the user can change for the Restart Policy of the job.
 type updateBatchJobSpecRestartPolicy struct {
 	Type                             string `json:"type,omitempty"`
 	OnSubmissionFailureRetries       int32  `json:"onSubmissionFailureRetries,omitempty"`
@@ -25,6 +26,7 @@ type updateBatchJobSpecRestartPolicy struct {
 	OnFailureRetryInterval           int64  `json:"onFailureRetryInterval,omitempty"`
 }
 
+// updateBatchJobSpecDynamicAllocation holds fields the user can change for the Dynamic Allocation of the job.
 type updateBatchJobSpecDynamicAllocation struct {
 	Enabled                bool  `json:"enabled,omitempty"`
 	InitialExecutors       int32 `json:"initialExecutors,omitempty"`
@@ -33,33 +35,39 @@ type updateBatchJobSpecDynamicAllocation struct {
 	ShuffleTrackingTimeout int64 `json:"shuffleTrackingTimeout,omitempty"`
 }
 
+// updateBatchJobSpecSparkPodSpec holds fields the user can change for both Driver and Executor
 type updateBatchJobSpecSparkPodSpec struct {
 	Cores          int32  `json:"cores,omitempty"`
 	CoreLimit      string `json:"coreLimit,omitempty"`
 	Memory         string `json:"memory,omitempty"`
 }
 
+// updateBatchJobSpecDriver holds fields the user can change for a job's Driver
 type updateBatchJobSpecDriver struct {
 	batchJobSpecSparkPodSpec `json:",inline,omitempty"`
 }
 
+// updateBatchJobSpecExecutor holds fields the user can change for a job's Executor
 type updateBatchJobSpecExecutor struct {
 	batchJobSpecSparkPodSpec        `json:",inline,omitempty"`
 	Instances                int32  `json:"instances,omitempty"`
 }
 
+// updateBatchJobManifest holds the fields needed to patch a SparkApplication object with different spec fields.
 type updateBatchJobManifest struct {
 	ApiVersion string             `json:"apiVersion"`
 	Kind       string             `json:"kind"`
 	Spec       updateBatchJobSpec `json:"spec"`
 }
 
+// updateScheduledBatchJobManifest holds the fields needed to patch a ScheduledSparkApplication object with different spec fields.
 type updateScheduledBatchJobManifest struct {
 	ApiVersion string                      `json:"apiVersion"`
 	Kind       string                      `json:"kind"`
 	Spec       updateScheduledBatchJobSpec `json:"spec"`
 }
 
+// updateBatchJobSpec holds the spec fields that can be received in the request and used to change job spec.
 type updateBatchJobSpec struct {
 	Type                string                               `json:"type,omitempty"`
 	MainClass           string                               `json:"mainClass,omitempty"`
@@ -71,6 +79,7 @@ type updateBatchJobSpec struct {
 	Executor            *updateBatchJobSpecExecutor          `json:"executor,omitempty"`
 }
 
+// updateScheduledBatchJobSpec holds the spec fields that can be received in the request and used to change scheduled job spec
 type updateScheduledBatchJobSpec struct {
 	Schedule                  string              `json:"schedule,omitempty"`
 	Suspend                   *bool               `json:"suspend,omitempty"`
@@ -81,6 +90,8 @@ type updateScheduledBatchJobSpec struct {
 	Template                  *updateBatchJobSpec `json:"template,omitempty"`
 }
 
+// createUpdateBatchJobManifest creates the manifest to change spec of the batch job
+// Returns a manifest that can be used to patch a SparkApplication.
 func createUpdateBatchJobManifest(spec updateBatchJobSpec) (job updateBatchJobManifest) {
 	job.ApiVersion = "sparkoperator.k8s.io/v1beta2"
 	job.Kind = "SparkApplication"
@@ -88,6 +99,8 @@ func createUpdateBatchJobManifest(spec updateBatchJobSpec) (job updateBatchJobMa
 	return
 }
 
+// createUpdateBatchJobManifest creates the manifest to change spec of the scheduled batch job.
+// Returns a manifest that can be used to patch a ScheduledSparkApplication.
 func createUpdateScheduledBatchJobManifest(spec updateScheduledBatchJobSpec) (job updateScheduledBatchJobManifest) {
 	job.ApiVersion = "sparkoperator.k8s.io/v1beta2"
 	job.Kind = "ScheduledSparkApplication"
@@ -100,6 +113,8 @@ func createUpdateScheduledBatchJobManifest(spec updateScheduledBatchJobSpec) (jo
 	return
 }
 
+// updateJob patches the SparkApplication with the given name using the given spec.
+// Returns a serviceResponse containing the status code and string output.
 func updateJob(jobName string, spec updateBatchJobSpec) (response serviceResponse){
 	getSparkAppResponse := getSparkApplication(jobName)
 	if getSparkAppResponse.Status != http.StatusOK {
@@ -154,6 +169,8 @@ func updateJob(jobName string, spec updateBatchJobSpec) (response serviceRespons
 	return
 }
 
+// updateJob patches the ScheduledSparkApplication with the given name using the given spec.
+// Returns a serviceResponse containing the status code and string output.
 func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (response serviceResponse){
 	getSparkAppResponse := getScheduledSparkApplication(jobName)
 	if getSparkAppResponse.Status != http.StatusOK {
@@ -208,10 +225,9 @@ func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (respo
 	return
 }
 
-/**
-* handler for PATCH: /job/{name}
-* update a batch job
-**/
+// updateBatchJob is the handler for PATCH: /job/{name}
+// Will take a http request containing spec fields to change spec of a job with name in url.
+// Writes a response containing a success or failure message.
 func updateBatchJob(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit update job endpoint")
 	vars := mux.Vars(r)
@@ -244,10 +260,9 @@ func updateBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-/**
-* handler for PATCH: /scheduledjob/{name}
-* update a scheduled batch job
-**/
+// updateScheduledBatchJob is the handler for PATCH: /scheduledjob/{name}
+// Will take a http request containing spec fields to change spec of a scheduled job with name in url.
+// Writes a response containing a success or failure message.
 func updateScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit update scheduled job endpoint")
 	vars := mux.Vars(r)

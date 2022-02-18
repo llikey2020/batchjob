@@ -27,17 +27,24 @@ import (
 	"github.com/robfig/cron"
 )
 
-const bufferSize = 1024
+// defaultRunHistoryLimit is the default value to set SuccessfulRunHistoryLimit and FailedRunHistoryLimit to for creating scheduled jobs.
 const defaultRunHistoryLimit = 5
 
+// goRoutineCreated tracks whether the go routine which handles suspending one run scheduled jobs.
 var goRoutineCreated bool
+// nonRepeatJobsSync stores scheduled job names to batch job manifest. 
+// Used to keep track of scheduled jobs that should run only once (one run scheduled jobs).
 var nonRepeatJobsSync sync.Map
 
+// batchJobMetadata holds metadata of a batch job. 
 type batchJobMetadata struct {
+	// Name is name of the batch job or scheduled batch job.
 	Name      string `yaml:"name" json:"name"`
+	// Namespace is the namespace the job will be created on.
 	Namespace string `yaml:"namespace"`
 }
 
+// batchJobSpecRestartPolicy holds fields related to restart policy of a batch job.
 type batchJobSpecRestartPolicy struct {
 	Type                             string `yaml:"type"`
 	OnSubmissionFailureRetries       int32  `yaml:"onSubmissionFailureRetries,omitempty"`
@@ -46,6 +53,7 @@ type batchJobSpecRestartPolicy struct {
 	OnFailureRetryInterval           int64  `yaml:"onFailureRetryInterval,omitempty"`
 }
 
+// batchJobSpecDynamicAllocation holds fields related to Dynamic Allocation of a batch job.
 type batchJobSpecDynamicAllocation struct {
 	Enabled                bool  `yaml:"enabled"`
 	InitialExecutors       int32 `yaml:"initialExecutors,omitempty"`
@@ -54,6 +62,7 @@ type batchJobSpecDynamicAllocation struct {
 	ShuffleTrackingTimeout int64 `yaml:"shuffleTrackingTimeout,omitempty"`
 }
 
+// batchJobSpecSparkConf holds fields realted to the Spark Configuration of a batch job.
 type batchJobSpecSparkConf struct {
 	SparkJarsIvy                  string `yaml:"spark.jars.ivy,omitempty"`
 	SparkSqlExtensions            string `yaml:"spark.sql.extensions,omitempty"`
@@ -66,6 +75,7 @@ type batchJobSpecSparkConf struct {
 	SparkEventLogDir              string `yaml:"spark.eventLog.dir,omitempty"`
 }
 
+// batchJobSpecSparkPodSpec holds fields which define common things for a Spark driver or executor pod.
 type batchJobSpecSparkPodSpec struct {
 	Cores          int32  `yaml:"cores" json:"cores"`
 	CoreLimit      string `yaml:"coreLimit,omitempty"`
@@ -73,17 +83,20 @@ type batchJobSpecSparkPodSpec struct {
 	ServiceAccount string `yaml:"serviceAccount,omitempty"`
 }
 
+// batchJobSpecDriver holds specification on the Spark Driver.
 type batchJobSpecDriver struct {
 	batchJobSpecSparkPodSpec `yaml:",inline"`
 	JavaOptions              string `yaml:"javaOptions,omitempty"`
 }
 
+// batchJobSpecExecutor holds specification on the Spark Executor
 type batchJobSpecExecutor struct {
 	batchJobSpecSparkPodSpec `yaml:",inline"`
 	Instances                int32  `yaml:"instances,omitempty" json:"instances"`
 	JavaOptions              string `yaml:"javaOptions,omitempty"`
 }
 
+// batchJobSpec holds specification for a batch job and scheduled batch job.
 type batchJobSpec struct {
 	Type                string                        `yaml:"type" json:"type"`
 	Mode                string                        `yaml:"mode"`
@@ -101,6 +114,7 @@ type batchJobSpec struct {
 	Executor            batchJobSpecExecutor          `yaml:"executor" json:"executor"`
 }
 
+// scheduledBatchJobSpec holds specification of a scheduled batch job
 type scheduledBatchJobSpec struct {
 	Schedule                    string              `yaml:"schedule"`
 	Suspend                     bool                `yaml:"suspend"`
@@ -110,6 +124,7 @@ type scheduledBatchJobSpec struct {
 	Template                    batchJobSpec        `yaml:"template"`
 }
 
+// batchJobManifest holds fields for creating a batch job using a yaml manifest.
 type batchJobManifest struct {
 	ApiVersion string           `yaml:"apiVersion"`
 	Kind       string           `yaml:"kind"`
@@ -117,6 +132,7 @@ type batchJobManifest struct {
 	Spec       batchJobSpec     `yaml:"spec" json:"spec"`
 }
 
+// scheduledBatchJobManifest holds fields for creating a scheduled batch job using a yaml manifest.
 type scheduledBatchJobManifest struct {
 	ApiVersion string                   `yaml:"apiVersion"`
 	Kind       string                   `yaml:"kind"`
@@ -124,6 +140,7 @@ type scheduledBatchJobManifest struct {
 	Spec       scheduledBatchJobSpec    `yaml:"spec" json:"spec"`
 }
 
+// batchJobSchedule holds fields in a request to create a scheduled batch job.
 type batchJobSchedule struct {
 	CronSchedule                    string
 	ConcurrencyPolicy               string
@@ -133,6 +150,9 @@ type batchJobSchedule struct {
 	RunHistoryLimit                 int32
 }
 
+// batchJobRequest holds fields in a request to create a batch job or scheduled batch job.
+// To create a batch job, Metadata and Spec are needed.
+// To create a scheduled batch job, Metadata, Spec, and Schedule are needed. OneRunScheduledJob is optional.
 type batchJobRequest struct {
 	Metadata            batchJobMetadata `yaml:"metadata" json:"metadata"`
 	Spec                batchJobSpec     `yaml:"spec" json:"spec"`
@@ -140,15 +160,21 @@ type batchJobRequest struct {
 	Schedule            batchJobSchedule `yaml:"schedule,omitempty" json:"schedule,omitempty"`
 }
 
+// serviceResponse holds the response given to the user after a request is done.
 type serviceResponse struct {
+	// Status is an HTTP status code returned to the user for their request.
 	Status int    `json:"Status"`
 	Output string `json:"Output"`
 }
 
+// createBatchJobMetadata populates batch job metadata with values from SPARKJOB_CONFS.
+// Currently populates the metadata namespace.
 func createBatchJobMetadata(jobMetadataTemplate *batchJobMetadata) {
 	jobMetadataTemplate.Namespace = SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]
 }
 
+// createBatchJobSpecSparkConf populates batch job Spark conf with values from SPARKJOB_CONFS.
+// Currently populates SparkJarsIvy, SparkSqlExtensions, SparkSqlCatalogSparkCatalog, SparkDeltaLogStoreClass, SparkSqlWarehouseDir, SparkEventLogEnabled, and SparkEventLogDir.
 func createBatchJobSpecSparkConf(batchJobSpecSparkConf *batchJobSpecSparkConf) {
 	batchJobSpecSparkConf.SparkJarsIvy = SPARKJOB_SPARKCONFS["spark.jars.ivy"]
 	batchJobSpecSparkConf.SparkSqlExtensions = SPARKJOB_SPARKCONFS["spark.sql.extensions"]
@@ -159,19 +185,23 @@ func createBatchJobSpecSparkConf(batchJobSpecSparkConf *batchJobSpecSparkConf) {
 	batchJobSpecSparkConf.SparkEventLogDir = SPARKJOB_SPARKCONFS["spark.eventLog.dir"]
 }
 
+// createBatchJobSpecRestartPolicy populates batch job restart policy with values from SPARKJOB_CONFS.
 func createBatchJobSpecRestartPolicy(jobSpecRestartPolicy *batchJobSpecRestartPolicy) {
 	jobSpecRestartPolicy.Type = SPARKJOB_CONFS["SPARKJOB_RESTARTPOLICY_TYPE"]
 }
 
+// createBatchJobSpecDriver populates batch job driver with values from SPARKJOB_CONFS.
 func createBatchJobSpecDriver(jobSpecDriver *batchJobSpecDriver) {
 	jobSpecDriver.ServiceAccount = SPARKJOB_CONFS["SPARKJOB_SERVICEACCOUNT"]
 	jobSpecDriver.JavaOptions = SPARKJOB_CONFS["SPARKJOB_DRIVER_JAVAOPTIONS"]
 }
 
+// createBatchJobSpecExecutor populates batch job executor with values from SPARKJOB_CONFS.
 func createBatchJobSpecExecutor(jobSpecExecutor *batchJobSpecExecutor) {
 	jobSpecExecutor.JavaOptions = SPARKJOB_CONFS["SPARKJOB_EXECUTOR_JAVAOPTIONS"]
 }
 
+// createBatchJobSpec populates a batch job spec with default values and values from SPARKJOB_CONFS.
 func createBatchJobSpec(jobSpecTemplate *batchJobSpec) {
 	jobSpecTemplate.Mode = "cluster"
 	jobSpecTemplate.Image = SPARKJOB_CONFS["SPARKJOB_IMAGE"]
@@ -184,16 +214,19 @@ func createBatchJobSpec(jobSpecTemplate *batchJobSpec) {
 	createBatchJobSpecExecutor(&jobSpecTemplate.Executor)
 }
 
+// createScheduledBatchJobSpec populates the scheduledBatchJobSpec struct with values in batchJobSpec and batchJobSchedule from a batchJobRequest.
 func createScheduledBatchJobSpec(jobSpecTemplate *scheduledBatchJobSpec, spec batchJobSpec, schedule batchJobSchedule) {
 	jobSpecTemplate.Schedule = schedule.CronSchedule
 	jobSpecTemplate.Template = spec
 	createBatchJobSpec(&jobSpecTemplate.Template)
 	jobSpecTemplate.Suspend = schedule.Suspend
 	jobSpecTemplate.ConcurrencyPolicy = schedule.ConcurrencyPolicy
+	// check whether RunHistoryLimit is non-zero. Use it as value for both SuccessfulRunHistoryLimit and FailedRunHistoryLimit if it is.
 	if schedule.RunHistoryLimit != 0 {
 		jobSpecTemplate.SuccessfulRunHistoryLimit = schedule.RunHistoryLimit
 		jobSpecTemplate.FailedRunHistoryLimit = schedule.RunHistoryLimit
 	} else {
+		// set SuccessfulRunHistoryLimit and/or FailedRunHistoryLimit given value in request. Set to default if not given.
 		if jobSpecTemplate.SuccessfulRunHistoryLimit = schedule.SuccessfulRunHistoryLimit; schedule.SuccessfulRunHistoryLimit == 0 {
 			jobSpecTemplate.SuccessfulRunHistoryLimit = defaultRunHistoryLimit
 		}
@@ -203,6 +236,7 @@ func createScheduledBatchJobSpec(jobSpecTemplate *scheduledBatchJobSpec, spec ba
 	}
 }
 
+// createBatchJobManifest creates a batch job manifest used to create a SparkApplication.
 func createBatchJobManifest(job *batchJobManifest) {
 	job.ApiVersion = "sparkoperator.k8s.io/v1beta2"
 	job.Kind = "SparkApplication"
@@ -210,6 +244,7 @@ func createBatchJobManifest(job *batchJobManifest) {
 	createBatchJobSpec(&job.Spec)
 }
 
+// createScheduledJobManifest creates a scheduled batch job manifest used to create a ScheduledSparkApplication
 func createScheduledJobManifest(job *scheduledBatchJobManifest, spec batchJobSpec, schedule batchJobSchedule) {
 	job.ApiVersion = "sparkoperator.k8s.io/v1beta2"
 	job.Kind = "ScheduledSparkApplication"
@@ -217,7 +252,9 @@ func createScheduledJobManifest(job *scheduledBatchJobManifest, spec batchJobSpe
 	createScheduledBatchJobSpec(&job.Spec, spec, schedule)
 }
 
+// createJob creates a yaml manifest file, and uses it to create a SparkApplication on the k8s cluster.
 func createJob(job batchJobManifest) (response serviceResponse) {
+	// create batch job maniest
 	createBatchJobManifest(&job)
 	sparkJobManifest, err := yaml.Marshal(&job)
 	if err != nil {
@@ -226,7 +263,9 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 		response.Output = "Unable to encode batch job into yaml. err: " + err.Error()
 		return
 	}
+	// print for logging purposes
 	fmt.Println(string(sparkJobManifest))
+	// write manifest into yaml file
 	curTime := strconv.FormatInt(time.Now().Unix(), 10)
 	sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
 	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
@@ -253,7 +292,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 		return
 	}
 
-	// creating sparkapplication from yaml
+	// specify the schema for creating a SparkApplication k8s object
 	deploymentRes := schema.GroupVersionResource{Group: "sparkoperator.k8s.io", Version: "v1beta2", Resource: "sparkapplications"}
 	// read spark job manifest yaml into a byte[]
 	content, err := ioutil.ReadFile(sparkJobManifestFile)
@@ -273,6 +312,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 		return
     }
 
+	// Create the SparkApplication using the yaml
 	result, err := dynamicClient.Resource(deploymentRes).
 		Namespace(SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]).
 		Create(context.TODO(), deployment, metav1.CreateOptions{})
@@ -294,6 +334,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	return
 }
 
+// createScheduledJob creates a yaml manifest file, and uses it to create a SparkApplication on the k8s cluster.
 func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedule batchJobSchedule, nonRepeat bool) (response serviceResponse) {
 	createScheduledJobManifest(&job, spec, schedule)
 	sparkJobManifest, err := yaml.Marshal(&job)
@@ -314,8 +355,9 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 		return
 	}
 	response = applyManifest(sparkJobManifestFile, job.Metadata.Name)
-	// non-repeating scheuled job, put in map to be tracked 
+	// if it is a non-repeating scheuled job, put in map to be tracked 
 	if nonRepeat {
+		// create go routine if not created yet
 		if !goRoutineCreated {
 			go nonRepeatScheduledJobCleanup()
 			goRoutineCreated = true
@@ -326,6 +368,7 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 	return
 }
 
+// applyManifest does "kubectl apply" using the given manifest file.
 func applyManifest(sparkJobManifestFile string, jobName string) (response serviceResponse) {
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
@@ -371,6 +414,8 @@ func applyManifest(sparkJobManifestFile string, jobName string) (response servic
 	return
 }
 
+// nonRepeatScheduledJobCleanup periodically checks nonRepeatJobsSync map of scheduled jobs that should only run once.
+// Will 
 func nonRepeatScheduledJobCleanup() {
 	ticker := time.NewTicker(15 * time.Second)
 	i := 1
@@ -438,14 +483,14 @@ func nonRepeatScheduledJobCleanup() {
 	}
 }
 
-/**
-* handler for POST: /job
-* Creates a job
-**/
+// createBatchJob is the handler for POST: /job
+// It creates a SparkApplication object with the spec given in the request body.
+// Writes a response with a status code and message.
+// On failure, writes an error message in response.
 func createBatchJob(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit create jobs endpoint")
 	decoder := json.NewDecoder(r.Body)
-	// Get request
+	// Get request bodys
 	var batchJobReq batchJobRequest
 	if err := decoder.Decode(&batchJobReq); err != nil {
 		log.Println("Cannot decode request body", err)
@@ -478,11 +523,12 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 
 	var response []byte
 	var err error
-	// SparkApplication
+	// create SparkApplication
 	log.Println("Creating SparkApplication")
 	var createReq batchJobManifest
 	createReq.Metadata = batchJobReq.Metadata
 	createReq.Spec = batchJobReq.Spec
+	// create batch job
 	createJobResponse := createJob(createReq)
 	if createJobResponse.Status != http.StatusOK {
 		log.Println("Error creating job: ", createJobResponse.Output)
@@ -490,6 +536,7 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(strconv.Itoa(createJobResponse.Status) + " - Error creating job: " + createJobResponse.Output))
 		return
 	}
+	// encode response
 	response, err = json.Marshal(createJobResponse)
 	if err != nil {
 		log.Println("Failed to encode response", err)
@@ -502,10 +549,10 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-/**
-* handler for POST: /scheduledjob
-* Creates a scheduled job
-**/
+// createScheduledBatchJob is the handler for POST: /scheduledjob
+// It creates a ScheduledSparkApplication object with the spec given in the request body.
+// Writes a response with a status code and message.
+// On failure, writes an error message in response.
 func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit create jobs endpoint")
 	decoder := json.NewDecoder(r.Body)
@@ -553,7 +600,7 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("400 - Invalid cron schedule format: " + err.Error()))
 		return
 	}
-	// check concurrencyPolicy is one of "Allow", "Forbid", "Replace"
+	// check concurrencyPolicy is one of "Allow", "Forbid", "Replace". Check 
 	if batchJobReq.Schedule.ConcurrencyPolicy != "Allow" && batchJobReq.Schedule.ConcurrencyPolicy != "Forbid" && batchJobReq.Schedule.ConcurrencyPolicy != "Replace" {
 		log.Println("Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace")
 		w.WriteHeader(http.StatusBadRequest)
@@ -572,7 +619,7 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var response []byte
-	// ScheduledSparkApplication
+	// create ScheduledSparkApplication
 	log.Println("Creating ScheduledSparkApplication")
 	var createReq scheduledBatchJobManifest
 	createReq.Metadata = batchJobReq.Metadata
@@ -584,7 +631,7 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(strconv.Itoa(createJobResponse.Status) + " - Error creating scheduled job: " + createJobResponse.Output))
 		return
 	}
-
+	// encode response
 	response, err = json.Marshal(createJobResponse)
 	if err != nil {
 		log.Println("Failed to encode response", err)

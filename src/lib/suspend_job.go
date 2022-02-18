@@ -16,16 +16,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// suspendScheduledBatchJobSpec holds the suspend field which value is changed when a scheduled job is suspended and resumed.
 type suspendScheduledBatchJobSpec struct {
 	Suspend bool `json:"suspend"`
 }
 
+// suspendScheduledBatchJobManifest holds the fields needed to patch a ScheduledSparkApplication object spec suspend field.
 type suspendScheduledBatchJobManifest struct {
 	ApiVersion string                       `json:"apiVersion"`
 	Kind       string                       `json:"kind"`
 	Spec       suspendScheduledBatchJobSpec `json:"spec"`
 }
 
+// createSuspendScheduledBatchJobManifest creates a manifest with the suspend field value as the given value.
+// Returns a manifest that can be used to patch a ScheduledSparkApplication with a new suspend value in it's spec.
 func createSuspendScheduledBatchJobManifest(suspend bool) (job suspendScheduledBatchJobManifest) {
 	job.ApiVersion = "sparkoperator.k8s.io/v1beta2"
 	job.Kind = "ScheduledSparkApplication"
@@ -33,6 +37,9 @@ func createSuspendScheduledBatchJobManifest(suspend bool) (job suspendScheduledB
 	return
 }
 
+// suspendScheduledJob suspends or unsuspends (resumes) a ScheduledSparkApplication with given jobName.
+// Setting suspend = true will suspend the ScheduledSparkApplication, setting suspend = false will resume the ScheduledSparkApplication.
+// Returns a serviceResponse containing the status code and string output.
 func suspendScheduledJob(jobName string, suspend bool) (response serviceResponse){
 	getJobResponse := getScheduledJob(jobName)
 	if getJobResponse.Status != http.StatusOK {
@@ -93,10 +100,9 @@ func suspendScheduledJob(jobName string, suspend bool) (response serviceResponse
 	return
 }
 
-/**
-* handler for PATCH: /scheduledjob/{name}/suspend
-* Suspend a scheduled batch job
-**/
+// suspendScheduledBatchJob is the handler for PATCH: /scheduledjob/{name}/suspend
+// Will suspend a scheduled batch job (ScheduledSparkApplication) with the given name by setting the suspend field to true.
+// Writes a response containing a success or failure message.
 func suspendScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit suspend scheduled job endpoint")
 	vars := mux.Vars(r)
@@ -121,10 +127,9 @@ func suspendScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-/**
-* handler for PATCH: /scheduledjob/{name}/resume
-* Resume a scheduled batch job
-**/
+// suspendScheduledBatchJob is the handler for PATCH: /scheduledjob/{name}/resume
+// Will suspend a scheduled batch job (ScheduledSparkApplication) with the given name by setting the suspend field to false.
+// Writes a response containing a success or failure message.
 func resumeScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	log.Println("Hit resume scheduled job endpoint")
 	vars := mux.Vars(r)
