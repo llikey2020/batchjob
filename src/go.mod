@@ -3,6 +3,7 @@ module batch-job
 go 1.16
 
 require (
+	github.com/aws/aws-sdk-go v1.42.50 // indirect
 	github.com/gorilla/mux v1.8.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pytimer/k8sutil v0.0.0-20211027022641-c63171c7e6e0

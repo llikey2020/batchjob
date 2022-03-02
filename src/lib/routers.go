@@ -53,5 +53,7 @@ func HandleRequests() {
 	router.HandleFunc("/scheduledjob/{name}/suspend", suspendScheduledBatchJob).Methods("PATCH")
 	router.HandleFunc("/scheduledjob/{name}/resume", resumeScheduledBatchJob).Methods("PATCH")
 	router.HandleFunc("/scheduledjob/{name}", updateScheduledBatchJob).Methods("PATCH")
+	router.HandleFunc("/ss3/upload/{bucketName}/{fileName}", SS3UploadFile).Methods("PUT")
+	router.HandleFunc("/ss3/delete/{bucketName}/{fileName}", SS3DeleteObject).Methods("DELETE")
 	log.Fatal(http.ListenAndServe(":8888", router))
 }
