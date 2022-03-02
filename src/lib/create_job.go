@@ -64,15 +64,20 @@ type batchJobSpecDynamicAllocation struct {
 
 // batchJobSpecSparkConf holds fields realted to the Spark Configuration of a batch job.
 type batchJobSpecSparkConf struct {
-	SparkJarsIvy                  string `yaml:"spark.jars.ivy,omitempty"`
-	SparkSqlExtensions            string `yaml:"spark.sql.extensions,omitempty"`
-	SparkSqlCatalogSparkCatalog   string `yaml:"spark.sql.catalog.spark_catalog,omitempty"`
-	SparkDeltaLogStoreClass       string `yaml:"spark.delta.logStore.class,omitempty"`
-	SparkDriverExtraJavaOptions   string `yaml:"spark.driver.extraJavaOptions,omitempty"`
-	SparkExecutorExtraJavaOptions string `yaml:"spark.executor.extraJavaOptions,omitempty"`
-	SparkSqlWarehouseDir          string `yaml:"spark.sql.warehouse.dir,omitempty"`
-	SparkEventLogEnabled          string `yaml:"spark.eventLog.enabled,omitempty"`
-	SparkEventLogDir              string `yaml:"spark.eventLog.dir,omitempty"`
+	SparkJarsIvy                         string `yaml:"spark.jars.ivy,omitempty"`
+	SparkSqlExtensions                   string `yaml:"spark.sql.extensions,omitempty"`
+	SparkSqlCatalogSparkCatalog          string `yaml:"spark.sql.catalog.spark_catalog,omitempty"`
+	SparkDeltaLogStoreClass              string `yaml:"spark.delta.logStore.class,omitempty"`
+	SparkDriverExtraJavaOptions          string `yaml:"spark.driver.extraJavaOptions,omitempty"`
+	SparkExecutorExtraJavaOptions        string `yaml:"spark.executor.extraJavaOptions,omitempty"`
+	SparkSqlWarehouseDir                 string `yaml:"spark.sql.warehouse.dir,omitempty"`
+	SparkEventLogEnabled                 string `yaml:"spark.eventLog.enabled,omitempty"`
+	SparkEventLogDir                     string `yaml:"spark.eventLog.dir,omitempty"`
+	SparkHadoopFsS3aEndpoint             string `yaml:"spark.hadoop.fs.s3a.endpoint,omitempty"`
+	SparkHadoopFsS3aAccessKey            string `yaml:"spark.hadoop.fs.s3a.access.key,omitempty"`
+	SparkHadoopFsS3aSecretKey            string `yaml:"spark.hadoop.fs.s3a.secret.key,omitempty"`
+	SparkHadoopFsS3aImpl                 string `yaml:"spark.hadoop.fs.s3a.impl,omitempty"`
+	SparkHadoopFsS3aConnectionSslEnabled string `yaml:"spark.hadoop.fs.s3a.connection.ssl.enabled,omitempty"`
 }
 
 // batchJobSpecSparkPodSpec holds fields which define common things for a Spark driver or executor pod.
@@ -183,6 +188,11 @@ func createBatchJobSpecSparkConf(batchJobSpecSparkConf *batchJobSpecSparkConf) {
 	batchJobSpecSparkConf.SparkSqlWarehouseDir = SPARKJOB_SPARKCONFS["spark.sql.warehouse.dir"]
 	batchJobSpecSparkConf.SparkEventLogEnabled = SPARKJOB_SPARKCONFS["spark.eventLog.enabled"]
 	batchJobSpecSparkConf.SparkEventLogDir = SPARKJOB_SPARKCONFS["spark.eventLog.dir"]
+	batchJobSpecSparkConf.SparkHadoopFsS3aEndpoint = SPARKJOB_SPARKCONFS["spark.hadoop.fs.s3a.endpoint"]
+	batchJobSpecSparkConf.SparkHadoopFsS3aAccessKey = SPARKJOB_SPARKCONFS["spark.hadoop.fs.s3a.access.key"]
+	batchJobSpecSparkConf.SparkHadoopFsS3aSecretKey = SPARKJOB_SPARKCONFS["spark.hadoop.fs.s3a.secret.key"]
+	batchJobSpecSparkConf.SparkHadoopFsS3aImpl = SPARKJOB_SPARKCONFS["spark.hadoop.fs.s3a.impl"]
+	batchJobSpecSparkConf.SparkHadoopFsS3aConnectionSslEnabled = SPARKJOB_SPARKCONFS["spark.hadoop.fs.s3a.connection.ssl.enabled"]
 }
 
 // createBatchJobSpecRestartPolicy populates batch job restart policy with values from SPARKJOB_CONFS.

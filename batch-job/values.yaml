@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: gitlab.planetrover.io:5050/sequoiadp/batch-job
+  repository: gitlab.planetrover.ca:5050/sequoiadp/batch-job
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
@@ -17,7 +17,7 @@ fullnameOverride: ""
 sparkJob:
   namespace: "default"
   sparkVersion: "3.0.2"
-  image: "gitlab.planetrover.io:5050/sequoiadp/spark:latest"
+  image: "gitlab.planetrover.ca:5050/sequoiadp/spark:latest"
   # list of strings
   imagePullSecrets: []
   imagePullPolicy: IfNotPresent
@@ -32,6 +32,11 @@ sparkJob:
     spark.sql.warehouse.dir:                                 alluxio://alluxio-master-0:19998/spark-warehouse/
     spark.eventLog.enabled:                                  "true"
     spark.eventLog.dir:                                      alluxio://alluxio-master-0:19998/spark-logs/
+    spark.hadoop.fs.s3a.endpoint:                            192.168.6.97:8002
+    spark.hadoop.fs.s3a.access.key:                          ABCDEFGHIJKLMNOPQRST
+    spark.hadoop.fs.s3a.secret.key:                          abcdefghijklmnopqrstuvwxyz0123456789ABCD
+    spark.hadoop.fs.s3a.impl:                                org.apache.hadoop.fs.s3a.S3AFileSystem
+    spark.hadoop.fs.s3a.connection.ssl.enabled:              false
   driver:
     javaOptions: -Dalluxio.master.rpc.addresses=alluxio-master-0:19998
   executor:
