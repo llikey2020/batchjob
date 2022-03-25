@@ -67,11 +67,11 @@ spec:
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /jobs
+              path: /jobs/list
               port: batch-service
           readinessProbe:
             httpGet:
-              path: /jobs
+              path: /jobs/list
               port: batch-service
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
