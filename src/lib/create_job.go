@@ -10,6 +10,7 @@ import (
 	"time"
 	"context"
 	"sync"
+	"regexp"
 
 	"gopkg.in/yaml.v2"
 
@@ -29,6 +30,7 @@ import (
 
 // defaultRunHistoryLimit is the default value to set SuccessfulRunHistoryLimit and FailedRunHistoryLimit to for creating scheduled jobs.
 const defaultRunHistoryLimit = 5
+const nameRegex = `^[a-z]([-a-z0-9]*[a-z0-9])?$`
 
 // goRoutineCreated tracks whether the go routine which handles suspending one run scheduled jobs.
 var goRoutineCreated bool
@@ -521,11 +523,21 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("400 - Cannot decode request body:"+ err.Error()))
 		return
 	}
-	// error 400 checking for mandatory fields
+	// error 400 checking for mandatory fields and valid values
 	if batchJobReq.Metadata.Name == "" {
 		log.Println("Missing metadata: name")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 - Missing metadata: name"))
+		return
+	} else if match, _ := regexp.MatchString(nameRegex, batchJobReq.Metadata.Name); !match {
+		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("400 - " + "Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')"))
+		return
+	} else if len(batchJobReq.Metadata.Name) >= 64 {
+		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters.")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("400 - Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters."))
 		return
 	} else if batchJobReq.Spec.Type == "" || batchJobReq.Spec.MainClass == "" || batchJobReq.Spec.MainApplicationFile == "" {
 		log.Println("Missing one of spec parameters: type, mainClass, or mainApplicationFile")
@@ -587,11 +599,21 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("400 - Cannot decode request body:"+ err.Error()))
 		return
 	}
-	// error 400 checking for mandatory fields
-	if batchJobReq.Metadata.Name == "" {
+	// error 400 checking for mandatory fields and valid values
+	if  batchJobReq.Metadata.Name == "" {
 		log.Println("Missing metadata: name")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 - Missing metadata: name"))
+		return
+	} else if match, _ := regexp.MatchString(nameRegex, batchJobReq.Metadata.Name); !match{
+		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("400 - " + "Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')"))
+		return
+	} else if len(batchJobReq.Metadata.Name) >= 64 {
+		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters.")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("400 - Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters."))
 		return
 	} else if batchJobReq.Spec.Type == "" || batchJobReq.Spec.MainClass == "" || batchJobReq.Spec.MainApplicationFile == "" {
 		log.Println("Missing one of spec parameters: type, mainClass, or mainApplicationFile")
