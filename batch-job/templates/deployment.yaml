@@ -61,6 +61,16 @@ spec:
             - name: SPARKJOB_SPARKCONF
               value: {{ range $val := $jobSparkConfs }}{{ printf "%v " $val }}{{ end }}
           {{- end }}
+            - name: SPARK_EVENTLOG_DIR
+              value: {{ .Values.sparkEventLogDir }}
+            - name: S3A_BUCKET_NAME
+              value: {{ .Values.s3aBucketName }}
+            - name: S3A_ENDPOINT
+              value: {{ .Values.s3aEndpoint }}
+            - name: S3A_ACCESS_KEY
+              value: {{ .Values.s3aAccessKey }}
+            - name: S3A_SECRET_KEY
+              value: {{ .Values.s3aSecretKey }}
           ports:
             - name: batch-service
               containerPort: {{ .Values.service.port }}
