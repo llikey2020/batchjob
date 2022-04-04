@@ -64,13 +64,13 @@ spec:
             - name: SPARK_EVENTLOG_DIR
               value: {{ .Values.sparkEventLogDir }}
             - name: S3A_BUCKET_NAME
-              value: {{ .Values.s3aBucketName }}
+              value: {{ .Values.s3.bucketName }}
             - name: S3A_ENDPOINT
-              value: {{ .Values.s3aEndpoint }}
+              value: {{ .Values.s3.endpoint }}
             - name: S3A_ACCESS_KEY
-              value: {{ .Values.s3aAccessKey }}
+              value: {{ .Values.s3.accessKey }}
             - name: S3A_SECRET_KEY
-              value: {{ .Values.s3aSecretKey }}
+              value: {{ .Values.s3.secretKey }}
           ports:
             - name: batch-service
               containerPort: {{ .Values.service.port }}
