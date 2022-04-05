@@ -35,6 +35,8 @@ func init() {
 		sparkConf := strings.Split(conf, "=")
 		SPARKJOB_SPARKCONFS[sparkConf[0]] = sparkConf[1]
 	}
+
+	initializeLogging()
 }
 
 func HandleRequests() {
