@@ -12,6 +12,7 @@ import (
 var SPARKJOB_IMAGEPULLSECRETS []string
 var SPARKJOB_CONFS map[string]string = make(map[string]string)
 var SPARKJOB_SPARKCONFS map[string]string = make(map[string]string)
+var S3_BUCKET_NAME string
 
 func init() {
 	sparkJobConfKeys := []string{
@@ -35,6 +36,8 @@ func init() {
 		sparkConf := strings.Split(conf, "=")
 		SPARKJOB_SPARKCONFS[sparkConf[0]] = sparkConf[1]
 	}
+
+	S3_BUCKET_NAME = os.Getenv("S3A_BUCKET_NAME")
 }
 
 func HandleRequests() {
@@ -53,7 +56,16 @@ func HandleRequests() {
 	router.HandleFunc("/scheduledjobs/suspend/{name}", suspendScheduledBatchJob).Methods("PATCH")
 	router.HandleFunc("/scheduledjobs/resume/{name}", resumeScheduledBatchJob).Methods("PATCH")
 	router.HandleFunc("/scheduledjobs/update/{name}", updateScheduledBatchJob).Methods("PATCH")
-	router.HandleFunc("/ss3/upload/{bucketName}/{fileName}", SS3UploadFile).Methods("PUT")
-	router.HandleFunc("/ss3/delete/{bucketName}/{fileName}", SS3DeleteObject).Methods("DELETE")
+
+	router.HandleFunc("/ss3/upload/{bucketName}/{fileName}", SS3UploadFile).
+		Methods("PUT").
+		Queries("fileType", "{fileType}").
+		Queries("isShared", "{isShared}")
+
+	router.HandleFunc("/ss3/delete/{bucketName}/{fileName}", SS3DeleteObject).
+		Methods("DELETE").
+		Queries("fileType", "{fileType}").
+		Queries("isShared", "{isShared}")
+
 	log.Fatal(http.ListenAndServe(":8888", router))
 }
