@@ -1,15 +1,15 @@
 package batchjob
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
+	"context"
 
 	"github.com/gorilla/mux"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/kubernetes"
 )
 
 // deleteJob deletes a job with the given jobName. A job is represented by the SparkApplication CRD.
@@ -31,17 +31,6 @@ func deleteJob(jobName string) (response serviceResponse) {
 		response.Output = "Unable to create an kubernetes client. err: " + err.Error()
 		return
 	}
-
-	// delete batch job manifest yaml
-	fileName := jobName + manifestFileSuffix
-	deleteResponse := deleteObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
-	if deleteResponse.Status != http.StatusOK {
-		log.Println("Unable to delete scheduled batch job manifest file in S3. err: ", err.Error())
-		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to delete scheduled batch job manifest file in S3. err: " + err.Error()
-		return
-	}
-
 	// delete any runs of this job
 	getRunsResponse := getRunsFromJobName(jobName, false)
 	if getRunsResponse.Status != http.StatusOK {
@@ -107,17 +96,6 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 		response.Output = "Unable to create an kubernetes client. err: " + err.Error()
 		return
 	}
-
-	// delete batch job manifest yaml
-	fileName := jobName + scheduledManifestFileSuffix
-	deleteResponse := deleteObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
-	if deleteResponse.Status != http.StatusOK {
-		log.Println("Unable to delete scheduled batch job manifest file in S3. err: ", err.Error())
-		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to delete scheduled batch job manifest file in S3. err: " + err.Error()
-		return
-	}
-
 	var res rest.Result
 	// delete the job
 	res = clientset.RESTClient().Delete().
