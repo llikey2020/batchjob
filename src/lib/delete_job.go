@@ -3,7 +3,6 @@ package batchjob
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -19,14 +18,12 @@ func deleteJob(jobName string) (response serviceResponse) {
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an kubernetes client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an kubernetes client. err: " + err.Error()
 		return
@@ -45,7 +42,6 @@ func deleteJob(jobName string) (response serviceResponse) {
 	// delete any runs of this job
 	getRunsResponse := getRunsFromJobName(jobName, false)
 	if getRunsResponse.Status != http.StatusOK {
-		log.Println("Unable to delete job runs. err: ", getRunsResponse.ErrMessage)
 		response.Status = getRunsResponse.Status
 		response.Output = "Unable to delete job runs. err: " + getRunsResponse.ErrMessage
 		return
@@ -53,7 +49,6 @@ func deleteJob(jobName string) (response serviceResponse) {
 	for _, item := range getRunsResponse.Jobs {
 		deleteRunResponse := deleteJob(item.Name)
 		if deleteRunResponse.Status != http.StatusOK {
-			log.Println("Unable to delete job runs. err: ", deleteRunResponse.Output)
 			response.Status = http.StatusInternalServerError
 			response.Output = "Unable to delete job runs. err: " + deleteRunResponse.Output
 			return
@@ -71,14 +66,11 @@ func deleteJob(jobName string) (response serviceResponse) {
 	statusCode := http.StatusOK
 	res = res.StatusCode(&statusCode)
 	if statusCode == http.StatusNotFound {
-		log.Println("SparkApplication with name "+ jobName +" does not exist. err: ", res.Error())
 		response.Status = http.StatusNotFound
 		response.Output = "SparkApplication with name "+ jobName +" does not exist. err: " + res.Error().Error()
 		return
 	} else if res.Error() != nil {
-		log.Println("StatusCode:", statusCode)
-		log.Println("Unable to DELETE SparkApplication. err: ", res.Error())
-		response.Status = http.StatusInternalServerError
+		response.Status = statusCode
 		response.Output = "Unable to DELETE SparkApplication. err: " + res.Error().Error()
 		return
 	}
@@ -95,14 +87,12 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an kubernetes client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an kubernetes client. err: " + err.Error()
 		return
@@ -129,14 +119,11 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 	statusCode := http.StatusOK
 	res = res.StatusCode(&statusCode)
 	if statusCode == http.StatusNotFound {
-		log.Println("ScheduledSparkApplication with name "+ jobName +" does not exist. err: ", res.Error())
 		response.Status = http.StatusNotFound
 		response.Output = "ScheduledSparkApplication with name "+ jobName +" does not exist. err: " + res.Error().Error()
 		return
 	} else if res.Error() != nil {
-		log.Println("StatusCode:", statusCode)
-		log.Println("Unable to DELETE ScheduledSparkApplication. err: ", res.Error())
-		response.Status = http.StatusInternalServerError
+		response.Status = statusCode
 		response.Output = "Unable to DELETE ScheduledSparkApplication. err: " + res.Error().Error()
 		return
 	}
@@ -146,17 +133,17 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 	return
 }
 
-// deleteBatchJob is the handler for DELETE: /job/{name}
+// deleteBatchJob is the handler for DELETE: /jobs/delete/{name}
 // It deletes a batch job with the given name in the URL by deleting a SparkApplication with the same name.
 // Writes a response with status and message on success.
 // On failure, writes an error message in response.
 func deleteBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit delete job endpoint")
+	logInfo("Hit delete job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	deleteJobResponse := deleteJob(jobName)
 	if deleteJobResponse.Status != http.StatusOK {
-		log.Println("Error deleting job: ", deleteJobResponse.Output)
+		logError("Error deleting job: " + deleteJobResponse.Output)
 		w.WriteHeader(deleteJobResponse.Status)
 		w.Write([]byte(strconv.Itoa(deleteJobResponse.Status) + " - Error deleting job: " + deleteJobResponse.Output))
 		return
@@ -164,26 +151,27 @@ func deleteBatchJob(w http.ResponseWriter, r *http.Request) {
 
 	response, err := json.Marshal(deleteJobResponse)
 	if err != nil {
-		log.Println("Failed to encode response. error:", err)
+		logError("Failed to encode response. error: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Failed to encode response. error: " + err.Error()))
 		return
 	}
+	logInfo(deleteJobResponse.Output)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
 
-// deleteScheduledBatchJob is the handler for DELETE: /scheduledjob/{name}
+// deleteScheduledBatchJob is the handler for DELETE: /scheduledjobs/delete/{name}
 // It deletes a scheduled batch job with the given name in the URL by deleting a ScheduledSparkApplication with the same name.
 // Writes a response with status and message on success.
 // On failure, writes an error message in response.
 func deleteScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit delete scheduled job endpoint")
+	logInfo("Hit delete scheduled job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	deleteJobResponse := deleteScheduledJob(jobName)
 	if deleteJobResponse.Status != http.StatusOK {
-		log.Println("Error deleting scheduled job: ", deleteJobResponse.Output)
+		logError("Error deleting scheduled job: " + deleteJobResponse.Output)
 		w.WriteHeader(deleteJobResponse.Status)
 		w.Write([]byte(strconv.Itoa(deleteJobResponse.Status) + " - Error deleting scheduled job: " + deleteJobResponse.Output))
 		return
@@ -191,11 +179,12 @@ func deleteScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 
 	response, err := json.Marshal(deleteJobResponse)
 	if err != nil {
-		log.Println("Failed to encode response. error:", err)
+		logError("Failed to encode response. error: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Failed to encode response. error: " + err.Error()))
 		return
 	}
+	logInfo(deleteJobResponse.Output)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
