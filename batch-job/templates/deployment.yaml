@@ -68,9 +68,9 @@ spec:
             - name: S3A_ENDPOINT
               value: {{ .Values.s3.endpoint }}
             - name: S3A_ACCESS_KEY
-              value: {{ .Values.s3.accessKey }}
+              valueFrom: {secretKeyRef: {name: {{ .Values.s3.secret }}, key: accessKey}}
             - name: S3A_SECRET_KEY
-              value: {{ .Values.s3.secretKey }}
+              valueFrom: {secretKeyRef: {name: {{ .Values.s3.secret }}, key: secretKey}}
           ports:
             - name: batch-service
               containerPort: {{ .Values.service.port }}

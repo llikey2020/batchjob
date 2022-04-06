@@ -15,10 +15,9 @@ nameOverride: ""
 fullnameOverride: ""
 
 s3:
-  bucketName: ""
   endpoint: ""
-  accessKey: ""
-  secretKey: ""
+  secret: ""
+  bucketName: ""
 
 sparkEventLogDir: ""
 
