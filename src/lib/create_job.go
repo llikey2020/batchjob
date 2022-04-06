@@ -1,29 +1,29 @@
 package batchjob
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
-	"regexp"
 	"strconv"
-	"sync"
 	"time"
+	"context"
+	"sync"
+	"regexp"
 
 	"gopkg.in/yaml.v2"
 
 	"github.com/pytimer/k8sutil/apply"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	serialYaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	serialYaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/robfig/cron"
 )
@@ -31,9 +31,6 @@ import (
 // defaultRunHistoryLimit is the default value to set SuccessfulRunHistoryLimit and FailedRunHistoryLimit to for creating scheduled jobs.
 const defaultRunHistoryLimit = 5
 const nameRegex = `^[a-z]([-a-z0-9]*[a-z0-9])?$`
-
-const manifestFileSuffix = ".yaml"
-const scheduledManifestFileSuffix = "_scheduled.yaml"
 
 // goRoutineCreated tracks whether the go routine which handles suspending one run scheduled jobs.
 var goRoutineCreated bool
@@ -293,16 +290,14 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	}
 	// print for logging purposes
 	fmt.Println(string(sparkJobManifest))
-
-	// save manifest to ss3
-	jobName := job.Metadata.Name
-	fileName := jobName + manifestFileSuffix
-	uploadResponse := uploadFile(S3_BUCKET_NAME, MANIFEST, fileName, false,
-		bytes.NewReader(sparkJobManifest))
-	if uploadResponse.Status != http.StatusOK {
-		log.Println("Unable to save batch job manifest to ss3. err: ", uploadResponse.Output)
+	// write manifest into yaml file
+	curTime := strconv.FormatInt(time.Now().Unix(), 10)
+	sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
+	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
+	if err != nil {
+		log.Println("Unable to write batch job manifest to file. err: ", err)
 		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to save batch job manifest to ss3. err: " + uploadResponse.Output
+		response.Output = "Unable to write batch job manifest to file. err: " + err.Error()
 		return
 	}
 
@@ -324,11 +319,18 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 
 	// specify the schema for creating a SparkApplication k8s object
 	deploymentRes := schema.GroupVersionResource{Group: "sparkoperator.k8s.io", Version: "v1beta2", Resource: "sparkapplications"}
-
+	// read spark job manifest yaml into a byte[]
+	content, err := ioutil.ReadFile(sparkJobManifestFile)
+	if err != nil {
+		log.Println("Unable to read batch job manifest to file. err: ", err)
+		response.Status = http.StatusInternalServerError
+		response.Output = "Unable to read batch job manifest to file. err: " + err.Error()
+		return
+	}
 	// decode YAML contents into Unstructured struct which is used to create the deployment
 	var decUnstructured = serialYaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
 	deployment := &unstructured.Unstructured{}
-    _, _, err = decUnstructured.Decode(sparkJobManifest, nil, deployment)
+    _, _, err = decUnstructured.Decode(content, nil, deployment)
     if err != nil {
         response.Status = http.StatusInternalServerError
 		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
@@ -368,19 +370,16 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 		return
 	}
 	fmt.Println(string(sparkJobManifest))
-
-	// save manifest to ss3
-	jobName := job.Metadata.Name
-	fileName := jobName + scheduledManifestFileSuffix
-	uploadResponse := uploadFile(S3_BUCKET_NAME, MANIFEST, fileName, false,
-		bytes.NewReader(sparkJobManifest))
-	if uploadResponse.Status != http.StatusOK {
-		log.Println("Unable to save batch job manifest to ss3. err: ", uploadResponse.Output)
+	curTime := strconv.FormatInt(time.Now().Unix(), 10)
+	sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
+	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
+	if err != nil {
+		log.Println("Unable to write batch job manifest to file. err: ", err)
 		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to save batch job manifest to ss3. err: " + uploadResponse.Output
+		response.Output = "Unable to write batch job manifest to file. err: " + err.Error()
 		return
 	}
-	response = applyManifest(sparkJobManifest, jobName)
+	response = applyManifest(sparkJobManifestFile, job.Metadata.Name)
 	// if it is a non-repeating scheuled job, put in map to be tracked 
 	if nonRepeat {
 		// create go routine if not created yet
@@ -395,7 +394,7 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 }
 
 // applyManifest does "kubectl apply" using the given manifest file.
-func applyManifest(sparkJobManifest []byte, jobName string) (response serviceResponse) {
+func applyManifest(sparkJobManifestFile string, jobName string) (response serviceResponse) {
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -418,13 +417,20 @@ func applyManifest(sparkJobManifest []byte, jobName string) (response serviceRes
 		response.Output = "Unable to create an discovery client. err: " + err.Error()
 		return
 	}
-
-	applyOptions := apply.NewApplyOptions(dynamicClient, discoveryClient)
-	if err := applyOptions.Apply(context.TODO(), sparkJobManifest); err != nil {
-		log.Println("Reason for error", errors.ReasonForError(err))
-		log.Println("Unable to apply the batch job manifest. err: ", err)
+	// read spark job manifest yaml into a byte[] and apply
+	content, err := ioutil.ReadFile(sparkJobManifestFile)
+	if err != nil {
+		log.Println("Unable to read batch job manifest to file. err: ", err)
 		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to read apply the batch job manifest. err: " + err.Error()
+		response.Output = "Unable to read batch job manifest to file. err: " + err.Error()
+		return
+	}
+	applyOptions := apply.NewApplyOptions(dynamicClient, discoveryClient)
+	if err := applyOptions.Apply(context.TODO(), content); err != nil {
+		log.Println("Reason for error", errors.ReasonForError(err))
+		log.Println("Unable to apply the batch job manifest to file. err: ", err)
+		response.Status = http.StatusInternalServerError
+		response.Output = "Unable to read apply the batch job manifest to file. err: " + err.Error()
 		return
 	}
 
@@ -482,17 +488,14 @@ func nonRepeatScheduledJobCleanup() {
 					return true
 				}
 				curTime := strconv.FormatInt(time.Now().Unix(), 10)
-
-				// save manifest to ss3
-				fileName := jobName + "_" + curTime + scheduledManifestFileSuffix
-				uploadResponse := uploadFile(S3_BUCKET_NAME, MANIFEST, fileName, false,
-					bytes.NewReader(sparkJobManifest))
-				if uploadResponse.Status != http.StatusOK {
-					log.Println("ERROR: Unable to save batch job manifest to ss3. err: ", uploadResponse.Output)
+				sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
+				err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
+				if err != nil {
+					log.Println("ERROR: Unable to write batch job manifest to file. err: ", err)
 					return true
 				}
 				
-				response := applyManifest(sparkJobManifest, jobName)
+				response := applyManifest(sparkJobManifestFile, jobName)
 				if response.Status == http.StatusInternalServerError {
 					log.Println("ERROR: Something when wrong when suspending the job", response.Output)
 					return true
