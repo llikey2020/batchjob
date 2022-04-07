@@ -26,7 +26,7 @@ func initializeLogging() {
 		log.Fatalf("Can't initialize zap logger: %v", err)
 	}
 	zapLogger = zapLogger.With(
-		zap.String("service", ServiceName),
+		zap.String("service", serviceName),
 	)
 	logger = zapLogger.Sugar()
 	logger.Info("Logger initialized")
