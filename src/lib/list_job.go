@@ -427,7 +427,7 @@ func getBatchJobs(w http.ResponseWriter, r *http.Request) {
 * handler for GET: /scheduledjobs
 * get all scheduledjobs
 **/
-// getScheduledBatchJobs is the handler for GET: /scheduledjobs
+// getScheduledBatchJobs is the handler for GET: /scheduledjobs/list
 // It gets ScheduledSparkApplications and reads each ScheduledSparkApplication into scheduledBatchJob type.
 // Writes a response with a list of scheduled batch jobs.
 // On failure, writes an error message in response.
@@ -453,7 +453,7 @@ func getScheduledBatchJobs(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-// getScheduledBatchJobs is the handler for GET: /scheduledjob/{name}
+// getScheduledBatchJobs is the handler for GET: /scheduledjobs/get/{name}
 // It gets a ScheduledSparkApplication with the given name and reads it into a scheduledBatchJob type.
 // Writes a response with a scheduled batch job.
 // On failure, writes an error message in response.
@@ -567,7 +567,7 @@ func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batch
 	return 
 }
 
-// getBatchJobRuns is the handler for GET: /job/{name}
+// getBatchJobRuns is the handler for GET: /jobs/get/{name}
 // It gets all created runs of the batch job with the name in the request URL.
 // Writes a response with a list of runs.
 // On failure, writes an error message in response.

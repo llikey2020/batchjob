@@ -7,11 +7,15 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-const ServiceName = "batch-job"
+// serviceName is the name of batch-job service to be added to log messages
+const serviceName = "batch-job"
+// callerSkip is used to skip this logging wrapper so log messages will contain the file and line where the logger was called at correctly.
 const callerSkip = 1
 var logger *zap.SugaredLogger
 
+// initializeLogging will create a sugared logger used to create structured logs
 func initializeLogging() {
+	// configure logger to use timestamp instead of the default unix time
 	loggerConfig := zap.NewProductionConfig()
 	loggerConfig.EncoderConfig.TimeKey = "timestamp"
     loggerConfig.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.RFC3339)
