@@ -2,7 +2,9 @@ package batchjob
 
 import (
 	"log"
+	"time"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const ServiceName = "batch-job"
@@ -10,11 +12,14 @@ const callerSkip = 1
 var logger *zap.SugaredLogger
 
 func initializeLogging() {
-	zapLogger, err := zap.NewProduction(
+	loggerConfig := zap.NewProductionConfig()
+	loggerConfig.EncoderConfig.TimeKey = "timestamp"
+    loggerConfig.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.RFC3339)
+	zapLogger, err := loggerConfig.Build(
 		zap.AddCallerSkip(callerSkip),
 	)
 	if err != nil {
-		log.Fatalf("can't initialize zap logger: %v", err)
+		log.Fatalf("Can't initialize zap logger: %v", err)
 	}
 	zapLogger = zapLogger.With(
 		zap.String("service", ServiceName),

@@ -357,7 +357,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	}
 
 	response.Status = http.StatusOK
-	response.Output = "Created sparkapplication "+ result.GetName()
+	response.Output = "Created sparkapplication: "+ result.GetName()
 	return
 }
 
@@ -431,7 +431,7 @@ func applyManifest(sparkJobManifest []byte, jobName string) (response serviceRes
 	}
 
 	response.Status = http.StatusOK
-	response.Output = "ScheduledSparkApplication " + jobName + " created"
+	response.Output = "Created ScheduledSparkApplication: " + jobName
 	return
 }
 
@@ -600,7 +600,7 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("500 - Failed to encode a response: " + err.Error()))
 		return
 	}
-
+	logInfo(createJobResponse.Output)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
@@ -631,7 +631,7 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	var response []byte
 	var createReq scheduledBatchJobManifest
 	createReq.Metadata = batchJobReq.Metadata
-	logError("Creating ScheduledSparkApplication: " + batchJobReq.Metadata.Name)
+	logInfo("Creating ScheduledSparkApplication: " + batchJobReq.Metadata.Name)
 	createJobResponse := createScheduledJob(createReq, batchJobReq.Spec, batchJobReq.Schedule, batchJobReq.OneRunScheduledJob)
 	if createJobResponse.Status != http.StatusOK {
 		logError("Error creating scheduled job: " + createJobResponse.Output)
@@ -647,7 +647,7 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("500 - Failed to encode a response: " + err.Error()))
 		return
 	}
-
+	logInfo(createJobResponse.Output)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }

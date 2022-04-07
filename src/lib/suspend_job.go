@@ -120,7 +120,7 @@ func suspendScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("500 - Failed to encode response. error: " + err.Error()))
 		return
 	}
-	logInfo("Successfully suspended scheduled job: " + jobName)
+	logInfo(suspendResponse.Output)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
@@ -148,7 +148,7 @@ func resumeScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("500 - Failed to encode response. error: " + err.Error()))
 		return
 	}
-	logInfo("Successfully resumed scheduled job: " + jobName)
+	logInfo(suspendResponse.Output)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
