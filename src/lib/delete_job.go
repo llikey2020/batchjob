@@ -33,7 +33,6 @@ func deleteJob(jobName string) (response serviceResponse) {
 	fileName := jobName + manifestFileSuffix
 	deleteResponse := deleteObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
 	if deleteResponse.Status != http.StatusOK {
-		log.Println("Unable to delete scheduled batch job manifest file in S3. err: ", err.Error())
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to delete scheduled batch job manifest file in S3. err: " + err.Error()
 		return
@@ -102,7 +101,6 @@ func deleteScheduledJob(jobName string) (response serviceResponse) {
 	fileName := jobName + scheduledManifestFileSuffix
 	deleteResponse := deleteObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
 	if deleteResponse.Status != http.StatusOK {
-		log.Println("Unable to delete scheduled batch job manifest file in S3. err: ", err.Error())
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to delete scheduled batch job manifest file in S3. err: " + err.Error()
 		return
