@@ -2,15 +2,14 @@ package batchjob
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
 	"context"
 	"sync"
 	"regexp"
+	"errors"
 
 	"gopkg.in/yaml.v2"
 
@@ -23,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	serialYaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/robfig/cron"
 )
@@ -283,19 +282,17 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	createBatchJobManifest(&job)
 	sparkJobManifest, err := yaml.Marshal(&job)
 	if err != nil {
-		log.Println("Unable to encode batch job into yaml. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to encode batch job into yaml. err: " + err.Error()
 		return
 	}
 	// print for logging purposes
-	fmt.Println(string(sparkJobManifest))
+	logInfo("Creating SparkApplication with manifest: " + string(sparkJobManifest))
 	// write manifest into yaml file
 	curTime := strconv.FormatInt(time.Now().Unix(), 10)
 	sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
 	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
 	if err != nil {
-		log.Println("Unable to write batch job manifest to file. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to write batch job manifest to file. err: " + err.Error()
 		return
@@ -304,14 +301,12 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an dynamic client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an dynamic client. err: " + err.Error()
 		return
@@ -322,7 +317,6 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	// read spark job manifest yaml into a byte[]
 	content, err := ioutil.ReadFile(sparkJobManifestFile)
 	if err != nil {
-		log.Println("Unable to read batch job manifest to file. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to read batch job manifest to file. err: " + err.Error()
 		return
@@ -341,16 +335,12 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	result, err := dynamicClient.Resource(deploymentRes).
 		Namespace(SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]).
 		Create(context.TODO(), deployment, metav1.CreateOptions{})
-	if errors.IsAlreadyExists(err) {
-		log.Println("Unable to Create SparkApplication. err: ", err.Error())
-		response.Status = http.StatusConflict
-		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
-		return
-	} else if err != nil {
-		log.Println("Reason for error", errors.ReasonForError(err))
-		log.Println("Unable to Create SparkApplication. err: ", err.Error())
+	if err != nil {
 		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
+		if status := k8serrors.APIStatus(nil); errors.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
+		response.Output = "Unable to get SparkApplications. err: " + err.Error()
 		return
 	}
 
@@ -364,17 +354,15 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 	createScheduledJobManifest(&job, spec, schedule)
 	sparkJobManifest, err := yaml.Marshal(&job)
 	if err != nil {
-		log.Println("Unable to encode batch job into yaml. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to encode batch job into yaml. err: " + err.Error()
 		return
 	}
-	fmt.Println(string(sparkJobManifest))
+	logInfo("Creating ScheduledSparkApplication with manifest: " + string(sparkJobManifest))
 	curTime := strconv.FormatInt(time.Now().Unix(), 10)
 	sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
 	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
 	if err != nil {
-		log.Println("Unable to write batch job manifest to file. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to write batch job manifest to file. err: " + err.Error()
 		return
@@ -398,21 +386,18 @@ func applyManifest(sparkJobManifestFile string, jobName string) (response servic
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an dynamic client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an dynamic client. err: " + err.Error()
 		return
 	}
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an discovery client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an discovery client. err: " + err.Error()
 		return
@@ -420,16 +405,16 @@ func applyManifest(sparkJobManifestFile string, jobName string) (response servic
 	// read spark job manifest yaml into a byte[] and apply
 	content, err := ioutil.ReadFile(sparkJobManifestFile)
 	if err != nil {
-		log.Println("Unable to read batch job manifest to file. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to read batch job manifest to file. err: " + err.Error()
 		return
 	}
 	applyOptions := apply.NewApplyOptions(dynamicClient, discoveryClient)
 	if err := applyOptions.Apply(context.TODO(), content); err != nil {
-		log.Println("Reason for error", errors.ReasonForError(err))
-		log.Println("Unable to apply the batch job manifest to file. err: ", err)
 		response.Status = http.StatusInternalServerError
+		if status := k8serrors.APIStatus(nil); errors.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
 		response.Output = "Unable to read apply the batch job manifest to file. err: " + err.Error()
 		return
 	}
@@ -440,30 +425,29 @@ func applyManifest(sparkJobManifestFile string, jobName string) (response servic
 }
 
 // nonRepeatScheduledJobCleanup periodically checks nonRepeatJobsSync map of scheduled jobs that should only run once.
-// Will 
+// Will update 
 func nonRepeatScheduledJobCleanup() {
 	ticker := time.NewTicker(15 * time.Second)
 	i := 1
 	// create the in-cluster config for GET
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
+		logError("Unable to create an in-cluster config. err: " + err.Error())
 		goRoutineCreated = false
 		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an kubernetes client. err: ", err)
+		logError("Unable to create an kubernetes client. err: " + err.Error())
 		goRoutineCreated = false
 		return
 	}
 	for _ = range ticker.C {
-		log.Println("Tock", i)
 		i = i + 1
 		nonRepeatJobsSync.Range(func(k, v interface{}) bool {
 			// GET ScheduledSparkApplication with job name
 			jobName := k.(string)
-			log.Println("Checking if JOBNAME:", jobName, "has run.")
+			logInfo("Checking if JOBNAME: " + jobName + " has run.")
 			res := ScheduledSparkApplication{}
 			err := clientset.RESTClient().Get().
 				AbsPath("/apis/sparkoperator.k8s.io/v1beta2").
@@ -473,7 +457,7 @@ func nonRepeatScheduledJobCleanup() {
 				Do(context.TODO()).
 				Into(&res)
 			if err != nil {
-				log.Println("Unable to get ScheduledSparkApplication. err: ", err)
+				logError("Unable to get ScheduledSparkApplication from sync map. err: " + err.Error())
 				nonRepeatJobsSync.Delete(jobName)
 				return true
 			}
@@ -481,26 +465,26 @@ func nonRepeatScheduledJobCleanup() {
 				// job has run, suspend it so no future runs happen
 				jobManifest := v.(*scheduledBatchJobManifest)
 				jobManifest.Spec.Suspend = true
-				log.Println("Suspending Non-repeating scheduled job:", jobName)
+				logInfo("Suspending Non-repeating scheduled job: " + jobName)
 				sparkJobManifest, err := yaml.Marshal(jobManifest)
 				if err != nil {
-					log.Println("ERROR: Unable to encode batch job into yaml. err: ", err)
+					logError("Unable to encode batch job into yaml. err: " + err.Error())
 					return true
 				}
 				curTime := strconv.FormatInt(time.Now().Unix(), 10)
 				sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
 				err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
 				if err != nil {
-					log.Println("ERROR: Unable to write batch job manifest to file. err: ", err)
+					logError("Unable to write batch job manifest to file. err: " + err.Error())
 					return true
 				}
 				
 				response := applyManifest(sparkJobManifestFile, jobName)
 				if response.Status == http.StatusInternalServerError {
-					log.Println("ERROR: Something when wrong when suspending the job", response.Output)
+					logError("Something when wrong when suspending the job: " + response.Output)
 					return true
 				}
-				log.Println("DONE suspending Non-repeating scheduled job:", jobName)
+				logInfo("DONE suspending Non-repeating scheduled job: " + jobName)
 				nonRepeatJobsSync.Delete(jobName)
 			}
 			return true
@@ -508,75 +492,98 @@ func nonRepeatScheduledJobCleanup() {
 	}
 }
 
+// verifyCreateJobRequestBody is used to verify the contents of a batchJobRequest.
+// If isScheduledJob is true, will check for fields needed to make scheduled jobs.
+func verifyCreateJobRequestBody(isScheduledJob bool, batchJobReq batchJobRequest) (response serviceResponse) {
+	// error 400 checking for mandatory fields and valid values
+	response.Status = http.StatusBadRequest
+	if  batchJobReq.Metadata.Name == "" {
+		response.Output = "Missing metadata: name"
+		return
+	} else if match, _ := regexp.MatchString(nameRegex, batchJobReq.Metadata.Name); !match{
+		response.Output = "Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')"
+		return
+	} else if len(batchJobReq.Metadata.Name) >= 64 {
+		response.Output = "Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters."
+		return
+	} else if batchJobReq.Spec.Type == "" || batchJobReq.Spec.MainClass == "" || batchJobReq.Spec.MainApplicationFile == "" {
+		response.Output = "Missing one of spec parameters: type, mainClass, or mainApplicationFile"
+		return
+	} else if batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Cores == 0 || batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Memory == "" {
+		response.Output = "Missing one of driver parameters: cores, or memory"
+		return
+	} else if batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Cores == 0 || batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Memory == "" {
+		response.Output = "Missing one of executor parameters: cores, or memory"
+		return
+	}
+	if isScheduledJob {
+		// error 400 for invalid format and input
+		_, err := cron.ParseStandard(batchJobReq.Schedule.CronSchedule)
+		if err != nil {
+			response.Output = "Invalid cron schedule format: " + err.Error()
+			return
+		}
+		 if batchJobReq.Schedule.ConcurrencyPolicy == "" {
+			response.Output = "Missing schedule parameters: concurrencyPolicy"
+			return
+		} else if batchJobReq.Schedule.ConcurrencyPolicy != string(ConcurrencyAllow) && batchJobReq.Schedule.ConcurrencyPolicy != string(ConcurrencyForbid) && batchJobReq.Schedule.ConcurrencyPolicy != string(ConcurrencyReplace) {
+			response.Output = "Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace"
+			return
+		} else if batchJobReq.Schedule.RunHistoryLimit < 0 || batchJobReq.Schedule.SuccessfulRunHistoryLimit < 0 || batchJobReq.Schedule.FailedRunHistoryLimit < 0 {
+			response.Output = "Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0"
+			return
+		} else if batchJobReq.Schedule.RunHistoryLimit != 0 && (batchJobReq.Schedule.SuccessfulRunHistoryLimit != 0 || batchJobReq.Schedule.FailedRunHistoryLimit != 0) {
+			response.Output = "Not allowed to set RunHistoryLimit and (SuccessfulRunHistoryLimit + FailedRunHistoryLimit). Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit + FailedRunHistoryLimit)"
+			return
+		}
+	}
+	response.Status = http.StatusOK
+	response.Output = "Batch job request ok"
+	return
+}
+
 // createBatchJob is the handler for POST: /job
 // It creates a SparkApplication object with the spec given in the request body.
 // Writes a response with a status code and message.
 // On failure, writes an error message in response.
 func createBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit create jobs endpoint")
+	logInfo("Hit create batch job endpoint")
 	decoder := json.NewDecoder(r.Body)
 	// Get request bodys
 	var batchJobReq batchJobRequest
 	if err := decoder.Decode(&batchJobReq); err != nil {
-		log.Println("Cannot decode request body", err)
+		logError("Cannot decode request body: "+ err.Error())
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Cannot decode request body:"+ err.Error()))
+		w.Write([]byte("400 - Cannot decode request body: "+ err.Error()))
 		return
 	}
-	// error 400 checking for mandatory fields and valid values
-	if batchJobReq.Metadata.Name == "" {
-		log.Println("Missing metadata: name")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing metadata: name"))
-		return
-	} else if match, _ := regexp.MatchString(nameRegex, batchJobReq.Metadata.Name); !match {
-		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - " + "Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')"))
-		return
-	} else if len(batchJobReq.Metadata.Name) >= 64 {
-		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters.")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters."))
-		return
-	} else if batchJobReq.Spec.Type == "" || batchJobReq.Spec.MainClass == "" || batchJobReq.Spec.MainApplicationFile == "" {
-		log.Println("Missing one of spec parameters: type, mainClass, or mainApplicationFile")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing one of spec parameters: type, mainClass, or mainApplicationFile"))
-		return
-	} else if batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Cores == 0 || batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Memory == "" {
-		log.Println("Missing one of driver parameters: cores, or memory")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing one of driver parameters: cores, or memor"))
-		return
-	} else if batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Cores == 0 || batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Memory == "" {
-		log.Println("Missing one of executor parameters: cores, or memory")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing one of executor parameters: cores, or memory"))
+	verifyRequestResponse := verifyCreateJobRequestBody(false, batchJobReq)
+	if verifyRequestResponse.Status != http.StatusOK {
+		logError("Invalid request: " + verifyRequestResponse.Output)
+		w.WriteHeader(verifyRequestResponse.Status)
+		w.Write([]byte(strconv.Itoa(verifyRequestResponse.Status) + " - Invalid request: " + verifyRequestResponse.Output))
 		return
 	}
-
-	var response []byte
-	var err error
 	// create SparkApplication
-	log.Println("Creating SparkApplication")
+	var response []byte
 	var createReq batchJobManifest
 	createReq.Metadata = batchJobReq.Metadata
 	createReq.Spec = batchJobReq.Spec
 	// create batch job
+	logInfo("Creating SparkApplication: " + batchJobReq.Metadata.Name)
 	createJobResponse := createJob(createReq)
 	if createJobResponse.Status != http.StatusOK {
-		log.Println("Error creating job: ", createJobResponse.Output)
+		logError("Error creating job: " + createJobResponse.Output)
 		w.WriteHeader(createJobResponse.Status)
 		w.Write([]byte(strconv.Itoa(createJobResponse.Status) + " - Error creating job: " + createJobResponse.Output))
 		return
 	}
 	// encode response
-	response, err = json.Marshal(createJobResponse)
+	response, err := json.Marshal(createJobResponse)
 	if err != nil {
-		log.Println("Failed to encode response", err)
+		logError("Failed to encode a response: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Unable to encode a response:" + err.Error()))
+		w.Write([]byte("500 - Failed to encode a response: " + err.Error()))
 		return
 	}
 
@@ -589,99 +596,41 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 // Writes a response with a status code and message.
 // On failure, writes an error message in response.
 func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit create jobs endpoint")
+	logInfo("Hit create scheduled job endpoint")
 	decoder := json.NewDecoder(r.Body)
 	// Get request
 	var batchJobReq batchJobRequest
 	if err := decoder.Decode(&batchJobReq); err != nil {
-		log.Println("Cannot decode request body", err)
+		logError("Cannot decode request body: "+ err.Error())
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Cannot decode request body:"+ err.Error()))
+		w.Write([]byte("400 - Cannot decode request body: "+ err.Error()))
 		return
 	}
-	// error 400 checking for mandatory fields and valid values
-	if  batchJobReq.Metadata.Name == "" {
-		log.Println("Missing metadata: name")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing metadata: name"))
-		return
-	} else if match, _ := regexp.MatchString(nameRegex, batchJobReq.Metadata.Name); !match{
-		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - " + "Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')"))
-		return
-	} else if len(batchJobReq.Metadata.Name) >= 64 {
-		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters.")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters."))
-		return
-	} else if batchJobReq.Spec.Type == "" || batchJobReq.Spec.MainClass == "" || batchJobReq.Spec.MainApplicationFile == "" {
-		log.Println("Missing one of spec parameters: type, mainClass, or mainApplicationFile")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing one of spec parameters: type, mainClass, or mainApplicationFile"))
-		return
-	} else if batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Cores == 0 || batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Memory == "" {
-		log.Println("Missing one of driver parameters: cores, or memory")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing one of driver parameters: cores, or memory"))
-		return
-	} else if batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Cores == 0 || batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Memory == "" {
-		log.Println("Missing one of executor parameters: cores, or memory")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing one of executor parameters: cores, or memory"))
-		return
-	} else if batchJobReq.Schedule.ConcurrencyPolicy == "" {
-		log.Println("Missing schedule parameters: concurrencyPolicy")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing schedule parameters: concurrencyPolicy"))
+	verifyRequestResponse := verifyCreateJobRequestBody(true, batchJobReq)
+	if verifyRequestResponse.Status != http.StatusOK {
+		logError("Invalid request: " + verifyRequestResponse.Output)
+		w.WriteHeader(verifyRequestResponse.Status)
+		w.Write([]byte(strconv.Itoa(verifyRequestResponse.Status) + " - Invalid request: " + verifyRequestResponse.Output))
 		return
 	}
-
-	// error 400 for invalid format and input
-	_, err := cron.ParseStandard(batchJobReq.Schedule.CronSchedule)
-	if err != nil {
-		log.Println("Invalid cron schedule format: " + err.Error())
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Invalid cron schedule format: " + err.Error()))
-		return
-	}
-	// check concurrencyPolicy is one of "Allow", "Forbid", "Replace". Check 
-	if batchJobReq.Schedule.ConcurrencyPolicy != "Allow" && batchJobReq.Schedule.ConcurrencyPolicy != "Forbid" && batchJobReq.Schedule.ConcurrencyPolicy != "Replace" {
-		log.Println("Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace"))
-		return
-	} else if batchJobReq.Schedule.RunHistoryLimit < 0 || batchJobReq.Schedule.SuccessfulRunHistoryLimit < 0 || batchJobReq.Schedule.FailedRunHistoryLimit < 0 {
-		log.Println("Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0"))
-		return
-	} else if batchJobReq.Schedule.RunHistoryLimit != 0 && (batchJobReq.Schedule.SuccessfulRunHistoryLimit != 0 || batchJobReq.Schedule.FailedRunHistoryLimit != 0) {
-		log.Println("Not allowed to set RunHistoryLimit and (SuccessfulRunHistoryLimit + FailedRunHistoryLimit). Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit + FailedRunHistoryLimit)")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Not allowed to set RunHistoryLimit and (SuccessfulRunHistoryLimit + FailedRunHistoryLimit). Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit + FailedRunHistoryLimit)"))
-		return
-	}
-
-	var response []byte
 	// create ScheduledSparkApplication
-	log.Println("Creating ScheduledSparkApplication")
+	var response []byte
 	var createReq scheduledBatchJobManifest
 	createReq.Metadata = batchJobReq.Metadata
+	logError("Creating ScheduledSparkApplication: " + batchJobReq.Metadata.Name)
 	createJobResponse := createScheduledJob(createReq, batchJobReq.Spec, batchJobReq.Schedule, batchJobReq.OneRunScheduledJob)
-	// error handling createScheduledJob
 	if createJobResponse.Status != http.StatusOK {
-		log.Println("Error creating scheduled job: ", createJobResponse.Output)
+		logError("Error creating scheduled job: " + createJobResponse.Output)
 		w.WriteHeader(createJobResponse.Status)
 		w.Write([]byte(strconv.Itoa(createJobResponse.Status) + " - Error creating scheduled job: " + createJobResponse.Output))
 		return
 	}
 	// encode response
-	response, err = json.Marshal(createJobResponse)
+	response, err := json.Marshal(createJobResponse)
 	if err != nil {
-		log.Println("Failed to encode response", err)
+		logError("Failed to encode a response: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Unable to encode a response:" + err.Error()))
+		w.Write([]byte("500 - Failed to encode a response: " + err.Error()))
 		return
 	}
 

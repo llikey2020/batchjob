@@ -2,15 +2,15 @@ package batchjob
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"context"
 	"strconv"
+	"errors"
 
 	"github.com/gorilla/mux"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,21 +44,18 @@ func suspendScheduledJob(jobName string, suspend bool) (response serviceResponse
 	getJobResponse := getScheduledJob(jobName)
 	if getJobResponse.Status != http.StatusOK {
 		response.Status = getJobResponse.Status
-		log.Println("Unable to find ScheduledSparkApplication:" + getJobResponse.ErrMessage)
 		response.Output = getJobResponse.ErrMessage
 		return
 	}
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create a dynamic client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create a dynamic client. err: " + err.Error()
 		return
@@ -68,7 +65,6 @@ func suspendScheduledJob(jobName string, suspend bool) (response serviceResponse
 	obj := createSuspendScheduledBatchJobManifest(suspend)
 	data, err := json.Marshal(obj)
 	if err != nil {
-		log.Println("Unable to create JSON. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create JSON. err: " + err.Error()
 		return
@@ -84,10 +80,11 @@ func suspendScheduledJob(jobName string, suspend bool) (response serviceResponse
 			Force: &force,
 		})
 	if err != nil {
-		log.Println("Reason for error", errors.ReasonForError(err))
-		log.Println("Unable to Patch ScheduledSparkApplication. err: ", err.Error())
 		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to Patch ScheduledSparkApplication. err: " + err.Error()
+		if status := k8serrors.APIStatus(nil); errors.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
+		response.Output = "Unable to patch ScheduledSparkApplication. err: " + err.Error()
 		return
 	}
 
@@ -104,13 +101,13 @@ func suspendScheduledJob(jobName string, suspend bool) (response serviceResponse
 // Will suspend a scheduled batch job (ScheduledSparkApplication) with the given name by setting the suspend field to true.
 // Writes a response containing a success or failure message.
 func suspendScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit suspend scheduled job endpoint")
+	logInfo("Hit suspend scheduled job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	
 	suspendResponse := suspendScheduledJob(jobName, true)
 	if suspendResponse.Status != http.StatusOK {
-		log.Println("Error suspending job", suspendResponse.Output)
+		logError("Failed to suspend scheduled batch job: " + suspendResponse.Output)
 		w.WriteHeader(suspendResponse.Status)
 		w.Write([]byte(strconv.Itoa(suspendResponse.Status) + " - Failed to suspend scheduled batch job:" + suspendResponse.Output))
 		return
@@ -118,11 +115,12 @@ func suspendScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 
 	response, err := json.Marshal(suspendResponse)
 	if err != nil {
-		log.Println("Failed to encode response", err)
+		logError("Failed to encode response. error: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Failed to encode response: " + err.Error()))
+		w.Write([]byte("500 - Failed to encode response. error: " + err.Error()))
 		return
 	}
+	logInfo("Successfully suspended scheduled job: " + jobName)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
@@ -131,25 +129,26 @@ func suspendScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 // Will suspend a scheduled batch job (ScheduledSparkApplication) with the given name by setting the suspend field to false.
 // Writes a response containing a success or failure message.
 func resumeScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit resume scheduled job endpoint")
+	logInfo("Hit resume scheduled job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	
 	suspendResponse := suspendScheduledJob(jobName, false)
 	if suspendResponse.Status != http.StatusOK {
-		log.Println("Error resuming job", suspendResponse.Output)
+		logError("Failed to resume scheduled batch job: " + suspendResponse.Output)
 		w.WriteHeader(suspendResponse.Status)
-		w.Write([]byte(strconv.Itoa(suspendResponse.Status) + " - Failed to resume scheduled batch job:" + suspendResponse.Output))
+		w.Write([]byte(strconv.Itoa(suspendResponse.Status) + " - Failed to resume scheduled batch job: " + suspendResponse.Output))
 		return
 	}
 
 	response, err := json.Marshal(suspendResponse)
 	if err != nil {
-		log.Println("Failed to encode response", err)
+		logError("Failed to encode response. error: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Failed to encode response: " + err.Error()))
+		w.Write([]byte("500 - Failed to encode response. error: " + err.Error()))
 		return
 	}
+	logInfo("Successfully resumed scheduled job: " + jobName)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
