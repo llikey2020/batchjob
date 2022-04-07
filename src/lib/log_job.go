@@ -94,7 +94,7 @@ func logJob(jobId string) (response batchJobRunOutputResponse) {
 	return
 }
 
-// getJobOutput is the handler for GET: /job/{name}/{id}
+// getJobOutput is the handler for GET: /jobs/get/{name}/{id}
 // Will take the name of a job/SparkApplication and Spark Application ID in URL.
 // Returns the SparkUISvc, State, and log output of the job's driver.
 func getJobOutput(w http.ResponseWriter, r *http.Request) {

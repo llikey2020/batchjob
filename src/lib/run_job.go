@@ -137,7 +137,7 @@ func runJob(jobName string, arguments []string) (response serviceResponse) {
 	return
 }
 
-// runBatchJob is the handler for POST: /job/run
+// runBatchJob is the handler for POST: /jobs/run
 // It creates a run of an existing batch job.
 // This creates a run by creating a new SparkApplication based off the existing job.
 // Writes a response containing a success or failure message.

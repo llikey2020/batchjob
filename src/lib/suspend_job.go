@@ -97,7 +97,7 @@ func suspendScheduledJob(jobName string, suspend bool) (response serviceResponse
 	return
 }
 
-// suspendScheduledBatchJob is the handler for PATCH: /scheduledjob/{name}/suspend
+// suspendScheduledBatchJob is the handler for PATCH: /scheduledjob/suspend/{name}
 // Will suspend a scheduled batch job (ScheduledSparkApplication) with the given name by setting the suspend field to true.
 // Writes a response containing a success or failure message.
 func suspendScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +125,7 @@ func suspendScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-// suspendScheduledBatchJob is the handler for PATCH: /scheduledjob/{name}/resume
+// suspendScheduledBatchJob is the handler for PATCH: /scheduledjobs/resume/{name}
 // Will suspend a scheduled batch job (ScheduledSparkApplication) with the given name by setting the suspend field to false.
 // Writes a response containing a success or failure message.
 func resumeScheduledBatchJob(w http.ResponseWriter, r *http.Request) {

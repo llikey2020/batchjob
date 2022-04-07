@@ -549,7 +549,7 @@ func verifyCreateJobRequestBody(isScheduledJob bool, batchJobReq batchJobRequest
 	return
 }
 
-// createBatchJob is the handler for POST: /job
+// createBatchJob is the handler for POST: /jobs/create
 // It creates a SparkApplication object with the spec given in the request body.
 // Writes a response with a status code and message.
 // On failure, writes an error message in response.
@@ -598,7 +598,7 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-// createScheduledBatchJob is the handler for POST: /scheduledjob
+// createScheduledBatchJob is the handler for POST: /scheduledjobs/create
 // It creates a ScheduledSparkApplication object with the spec given in the request body.
 // Writes a response with a status code and message.
 // On failure, writes an error message in response.

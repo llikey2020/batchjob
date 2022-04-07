@@ -220,7 +220,7 @@ func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (respo
 	return
 }
 
-// updateBatchJob is the handler for PATCH: /job/{name}
+// updateBatchJob is the handler for PATCH: /jobs/update/{name}
 // Will take a http request containing spec fields to change spec of a job with name in url.
 // Writes a response containing a success or failure message.
 func updateBatchJob(w http.ResponseWriter, r *http.Request) {
@@ -255,7 +255,7 @@ func updateBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-// updateScheduledBatchJob is the handler for PATCH: /scheduledjob/{name}
+// updateScheduledBatchJob is the handler for PATCH: /scheduledjobs/update/{name}
 // Will take a http request containing spec fields to change spec of a scheduled job with name in url.
 // Writes a response containing a success or failure message.
 func updateScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
