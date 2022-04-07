@@ -29,7 +29,14 @@ import (
 
 // defaultRunHistoryLimit is the default value to set SuccessfulRunHistoryLimit and FailedRunHistoryLimit to for creating scheduled jobs.
 const defaultRunHistoryLimit = 5
+// nameRegex is the regex used by Kubernetes to check for valid object name
 const nameRegex = `^[a-z]([-a-z0-9]*[a-z0-9])?$`
+// nameMaxCharCount is the max number of characters in a Kuberenetes object's name
+const nameMaxCharCount = 63
+// formatIntBase10 is used to convert an integer of the current unix time to a string in base 10
+const formatIntBase10 = 10
+// represents read/write permissions in the file system (-rw-r--r--).
+const fsPerms = 0644
 
 // goRoutineCreated tracks whether the go routine which handles suspending one run scheduled jobs.
 var goRoutineCreated bool
@@ -289,9 +296,9 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	// print for logging purposes
 	logInfo("Creating SparkApplication with manifest: " + string(sparkJobManifest))
 	// write manifest into yaml file
-	curTime := strconv.FormatInt(time.Now().Unix(), 10)
+	curTime := strconv.FormatInt(time.Now().Unix(), formatIntBase10)
 	sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
-	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
+	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, fsPerms)
 	if err != nil {
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to write batch job manifest to file. err: " + err.Error()
@@ -359,9 +366,9 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 		return
 	}
 	logInfo("Creating ScheduledSparkApplication with manifest: " + string(sparkJobManifest))
-	curTime := strconv.FormatInt(time.Now().Unix(), 10)
+	curTime := strconv.FormatInt(time.Now().Unix(), formatIntBase10)
 	sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
-	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
+	err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, fsPerms)
 	if err != nil {
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to write batch job manifest to file. err: " + err.Error()
@@ -471,9 +478,9 @@ func nonRepeatScheduledJobCleanup() {
 					logError("Unable to encode batch job into yaml. err: " + err.Error())
 					return true
 				}
-				curTime := strconv.FormatInt(time.Now().Unix(), 10)
+				curTime := strconv.FormatInt(time.Now().Unix(), formatIntBase10)
 				sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
-				err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, 0644)
+				err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, fsPerms)
 				if err != nil {
 					logError("Unable to write batch job manifest to file. err: " + err.Error())
 					return true
@@ -503,7 +510,7 @@ func verifyCreateJobRequestBody(isScheduledJob bool, batchJobReq batchJobRequest
 	} else if match, _ := regexp.MatchString(nameRegex, batchJobReq.Metadata.Name); !match{
 		response.Output = "Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')"
 		return
-	} else if len(batchJobReq.Metadata.Name) >= 64 {
+	} else if len(batchJobReq.Metadata.Name) > nameMaxCharCount {
 		response.Output = "Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters."
 		return
 	} else if batchJobReq.Spec.Type == "" || batchJobReq.Spec.MainClass == "" || batchJobReq.Spec.MainApplicationFile == "" {
@@ -596,7 +603,7 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 // Writes a response with a status code and message.
 // On failure, writes an error message in response.
 func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	logInfo("Hit create scheduled job endpoint")
+	logInfo("Hit create scheduled batch job endpoint")
 	decoder := json.NewDecoder(r.Body)
 	// Get request
 	var batchJobReq batchJobRequest
