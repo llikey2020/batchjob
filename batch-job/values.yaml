@@ -30,7 +30,11 @@ sparkJob:
   imagePullPolicy: IfNotPresent
   serviceAccount: spark
   restartPolicy:
-    type: Never
+    type: Always
+    onFailureRetries: 10000
+    onFailureRetryInterval: 10
+    onSubmissionFailureRetries: 3
+    onSubmissionFailureRetryInterval: 5
   sparkConf:
     spark.jars.ivy:                                          /tmp/.ivy
     spark.sql.extensions:                                    io.delta.sql.DeltaSparkSessionExtension
