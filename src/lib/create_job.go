@@ -25,6 +25,11 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	serialYaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/robfig/cron"
 )
@@ -39,9 +44,12 @@ const nameMaxCharCount = 63
 const formatIntBase10 = 10
 // represents read/write permissions in the file system (-rw-r--r--).
 const fsPerms = 0644
+<<<<<<< HEAD
 
 const manifestFileSuffix = ".yaml"
 const scheduledManifestFileSuffix = "_scheduled.yaml"
+=======
+>>>>>>> 112377e051317181df3f45371881fbc08ed4e1fa
 
 // goRoutineCreated tracks whether the go routine which handles suspending one run scheduled jobs.
 var goRoutineCreated bool
@@ -432,8 +440,7 @@ func applyManifest(sparkJobManifest []byte, jobName string) (response serviceRes
 		if status := k8serrors.APIStatus(nil); errors.As(err, &status) {
 			response.Status = int(status.Status().Code)
 		}
-		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to read apply the batch job manifest. err: " + err.Error()
+		response.Output = "Unable to read apply the batch job manifest to file. err: " + err.Error()
 		return
 	}
 
@@ -489,6 +496,7 @@ func nonRepeatScheduledJobCleanup() {
 					logError("Unable to encode batch job into yaml. err: " + err.Error())
 					return true
 				}
+<<<<<<< HEAD
 				curTime := strconv.FormatInt(time.Now().Unix(), 10)
 
 				// save manifest to ss3
@@ -497,6 +505,13 @@ func nonRepeatScheduledJobCleanup() {
 					bytes.NewReader(sparkJobManifest))
 				if uploadResponse.Status != http.StatusOK {
 					log.Println("ERROR: Unable to save batch job manifest to ss3. err: ", uploadResponse.Output)
+=======
+				curTime := strconv.FormatInt(time.Now().Unix(), formatIntBase10)
+				sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
+				err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, fsPerms)
+				if err != nil {
+					logError("Unable to write batch job manifest to file. err: " + err.Error())
+>>>>>>> 112377e051317181df3f45371881fbc08ed4e1fa
 					return true
 				}
 				
