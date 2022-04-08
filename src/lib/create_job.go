@@ -215,7 +215,18 @@ func createBatchJobSpecSparkConf(batchJobSpecSparkConf *batchJobSpecSparkConf) {
 
 // createBatchJobSpecRestartPolicy populates batch job restart policy with values from SPARKJOB_CONFS.
 func createBatchJobSpecRestartPolicy(jobSpecRestartPolicy *batchJobSpecRestartPolicy) {
+	// TODO: The default value is currently used, and it will be open to users on RESTful API in the future.
 	jobSpecRestartPolicy.Type = SPARKJOB_CONFS["SPARKJOB_RESTARTPOLICY_TYPE"]
+
+	onFailureRetries, _ := strconv.ParseInt(SPARKJOB_CONFS["SPARKJOB_RESTARTPOLICY_ONFAILURE_RETRIES"], 10, 64)
+	onFailureRetryInterval, _ := strconv.ParseInt(SPARKJOB_CONFS["SPARKJOB_RESTARTPOLICY_ONFAILURE_RETRY_INTERVAL"], 10, 64)
+	onSubmissionRetries, _ := strconv.ParseInt(SPARKJOB_CONFS["SPARKJOB_RESTARTPOLICY_ONSUBMISSION_RETRIES"], 10, 64)
+	onSubmissionRetryInterval, _ := strconv.ParseInt(SPARKJOB_CONFS["SPARKJOB_RESTARTPOLICY_ONSUBMISSION_RETRY_INTERVAL"], 10, 64)
+
+	jobSpecRestartPolicy.OnFailureRetries = int32(onFailureRetries)
+	jobSpecRestartPolicy.OnFailureRetryInterval = onFailureRetryInterval
+	jobSpecRestartPolicy.OnSubmissionFailureRetries = int32(onSubmissionRetries)
+	jobSpecRestartPolicy.OnSubmissionFailureRetryInterval = onSubmissionRetryInterval
 }
 
 // createBatchJobSpecDriver populates batch job driver with values from SPARKJOB_CONFS.
