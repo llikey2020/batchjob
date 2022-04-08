@@ -1,20 +1,25 @@
 package batchjob
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	errs "errors"
+	"github.com/jinzhu/copier"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"log"
 	"net/http"
-	"context"
 	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/robfig/cron"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
-	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
 
 // updateBatchJobSpecRestartPolicy holds fields the user can change for the Restart Policy of the job.
@@ -113,6 +118,105 @@ func createUpdateScheduledBatchJobManifest(spec updateScheduledBatchJobSpec) (jo
 	return
 }
 
+func updateManifestSpec(manifestSpec *batchJobSpec, spec *updateBatchJobSpec) (err error) {
+	err = copier.CopyWithOption(manifestSpec, spec, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+	if err != nil {
+		return err
+	}
+
+	err = copier.CopyWithOption(&manifestSpec.Driver.batchJobSpecSparkPodSpec, spec.Driver.batchJobSpecSparkPodSpec,
+		copier.Option{IgnoreEmpty: true, DeepCopy: true})
+	if err != nil {
+		return err
+	}
+
+	err = copier.CopyWithOption(&manifestSpec.Executor.batchJobSpecSparkPodSpec, spec.Executor.batchJobSpecSparkPodSpec,
+		copier.Option{IgnoreEmpty: true, DeepCopy: true})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getAndUpdateManifest(fileName string, spec updateBatchJobSpec) (err error) {
+	objectOutput, err := getObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
+	if err != nil {
+		log.Println("Unable to get batch job manifest from S3. err: ", err)
+		return err
+	}
+
+	fileInBytes, err := ioutil.ReadAll(objectOutput.Body)
+	if err != nil {
+		return err
+	}
+
+	var manifest batchJobManifest
+	err = yaml.Unmarshal(fileInBytes, &manifest)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("%+v\n", manifest)
+	log.Printf("%+v\n", spec)
+
+	// update properties in yaml
+	err = updateManifestSpec(&manifest.Spec, &spec)
+	if err != nil {
+		return err
+	}
+
+	yamlInBytes, err := yaml.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+	uploadResponse := uploadFile(S3_BUCKET_NAME, MANIFEST, fileName, false, bytes.NewReader(yamlInBytes))
+	if uploadResponse.Status != http.StatusOK {
+		return errs.New(uploadResponse.Output)
+	}
+	return nil
+}
+
+func getAndUpdateScheduledManifest(fileName string, spec updateScheduledBatchJobSpec) (err error) {
+	objectOutput, err := getObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
+	if err != nil {
+		log.Println("Unable to get batch job manifest from S3. err: ", err)
+		return err
+	}
+
+	fileInBytes, err := ioutil.ReadAll(objectOutput.Body)
+	if err != nil {
+		return err
+	}
+
+	var manifest scheduledBatchJobManifest
+	err = yaml.Unmarshal(fileInBytes, &manifest)
+	if err != nil {
+		return err
+	}
+
+	err = updateManifestSpec(&manifest.Spec.Template, spec.Template)
+	if err != nil {
+		return err
+	}
+
+	err = copier.CopyWithOption(&manifest.Spec, &spec, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+	if err != nil {
+		return err
+	}
+
+	yamlInBytes, err := yaml.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+
+	uploadResponse := uploadFile(S3_BUCKET_NAME, MANIFEST, fileName, false, bytes.NewReader(yamlInBytes))
+	if uploadResponse.Status != http.StatusOK {
+		return errs.New(uploadResponse.Output)
+	}
+	return nil
+}
+
 // updateJob patches the SparkApplication with the given name using the given spec.
 // Returns a serviceResponse containing the status code and string output.
 func updateJob(jobName string, spec updateBatchJobSpec) (response serviceResponse){
@@ -146,6 +250,16 @@ func updateJob(jobName string, spec updateBatchJobSpec) (response serviceRespons
 		log.Println("Unable to create JSON. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create JSON. err: " + err.Error()
+		return
+	}
+
+	// update manifest yaml in s3
+	fileName := jobName + manifestFileSuffix
+	err = getAndUpdateManifest(fileName, spec)
+	if err != nil {
+		log.Println("Unable to update batch job manifest file. err: ", err.Error())
+		response.Status = http.StatusInternalServerError
+		response.Output = "Unable to update batch job manifest file. err: " + err.Error()
 		return
 	}
 
@@ -202,6 +316,16 @@ func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (respo
 		log.Println("Unable to create JSON. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create JSON. err: " + err.Error()
+		return
+	}
+
+	// update batch job yaml in s3
+	fileName := jobName + scheduledManifestFileSuffix
+	err = getAndUpdateScheduledManifest(fileName, spec)
+	if err != nil {
+		log.Println("Unable to update scheduled batch job manifest file in S3. err: ", err.Error())
+		response.Status = http.StatusInternalServerError
+		response.Output = "Unable to update scheduled batch job manifest file in S3. err: " + err.Error()
 		return
 	}
 
