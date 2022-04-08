@@ -41,11 +41,11 @@ func logInfo(msg string) {
 }
 
 func logInfow(msg string, keysAndValues ...interface{}) {
-	logger.Infow(msg, keysAndValues)
+	logger.Infow(msg, keysAndValues...)
 }
 
 func logInfof(template string, args ...interface{}) {
-	logger.Infof(template, args)
+	logger.Infof(template, args...)
 }
 
 func logWarning(msg string) {
@@ -53,7 +53,7 @@ func logWarning(msg string) {
 }
 
 func logWarningw(msg string, keysAndValues ...interface{}) {
-	logger.Warnw(msg, keysAndValues)
+	logger.Warnw(msg, keysAndValues...)
 }
 
 func logError(msg string) {
@@ -61,7 +61,7 @@ func logError(msg string) {
 }
 
 func logErrorw(msg string, keysAndValues ...interface{}) {
-	logger.Errorw(msg, keysAndValues)
+	logger.Errorw(msg, keysAndValues...)
 }
 
 func logDPanic(msg string) {
