@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -25,11 +23,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	serialYaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/robfig/cron"
 )
@@ -40,16 +33,9 @@ const defaultRunHistoryLimit = 5
 const nameRegex = `^[a-z]([-a-z0-9]*[a-z0-9])?$`
 // nameMaxCharCount is the max number of characters in a Kuberenetes object's name
 const nameMaxCharCount = 63
-// formatIntBase10 is used to convert an integer of the current unix time to a string in base 10
-const formatIntBase10 = 10
-// represents read/write permissions in the file system (-rw-r--r--).
-const fsPerms = 0644
-<<<<<<< HEAD
 
 const manifestFileSuffix = ".yaml"
 const scheduledManifestFileSuffix = "_scheduled.yaml"
-=======
->>>>>>> 112377e051317181df3f45371881fbc08ed4e1fa
 
 // goRoutineCreated tracks whether the go routine which handles suspending one run scheduled jobs.
 var goRoutineCreated bool
@@ -318,7 +304,9 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 		return
 	}
 	// print for logging purposes
-	fmt.Println(string(sparkJobManifest))
+	logInfow("Created SparkApplication manifest",
+		"manifest", string(sparkJobManifest),
+	)
 
 	// save manifest to ss3
 	jobName := job.Metadata.Name
@@ -326,7 +314,6 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	uploadResponse := uploadFile(S3_BUCKET_NAME, MANIFEST, fileName, false,
 		bytes.NewReader(sparkJobManifest))
 	if uploadResponse.Status != http.StatusOK {
-		log.Println("Unable to save batch job manifest to ss3. err: ", uploadResponse.Output)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to save batch job manifest to ss3. err: " + uploadResponse.Output
 		return
@@ -385,7 +372,9 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 		response.Output = "Unable to encode batch job into yaml. err: " + err.Error()
 		return
 	}
-	fmt.Println(string(sparkJobManifest))
+	logInfow("Created ScheduledSparkApplication manifest",
+		"manifest", string(sparkJobManifest),
+	)
 
 	// save manifest to ss3
 	jobName := job.Metadata.Name
@@ -393,7 +382,6 @@ func createScheduledJob(job scheduledBatchJobManifest, spec batchJobSpec, schedu
 	uploadResponse := uploadFile(S3_BUCKET_NAME, MANIFEST, fileName, false,
 		bytes.NewReader(sparkJobManifest))
 	if uploadResponse.Status != http.StatusOK {
-		log.Println("Unable to save batch job manifest to ss3. err: ", uploadResponse.Output)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to save batch job manifest to ss3. err: " + uploadResponse.Output
 		return
@@ -496,7 +484,6 @@ func nonRepeatScheduledJobCleanup() {
 					logError("Unable to encode batch job into yaml. err: " + err.Error())
 					return true
 				}
-<<<<<<< HEAD
 				curTime := strconv.FormatInt(time.Now().Unix(), 10)
 
 				// save manifest to ss3
@@ -504,14 +491,7 @@ func nonRepeatScheduledJobCleanup() {
 				uploadResponse := uploadFile(S3_BUCKET_NAME, MANIFEST, fileName, false,
 					bytes.NewReader(sparkJobManifest))
 				if uploadResponse.Status != http.StatusOK {
-					log.Println("ERROR: Unable to save batch job manifest to ss3. err: ", uploadResponse.Output)
-=======
-				curTime := strconv.FormatInt(time.Now().Unix(), formatIntBase10)
-				sparkJobManifestFile := "/opt/batch-job/manifests/" + curTime
-				err = ioutil.WriteFile(sparkJobManifestFile, sparkJobManifest, fsPerms)
-				if err != nil {
-					logError("Unable to write batch job manifest to file. err: " + err.Error())
->>>>>>> 112377e051317181df3f45371881fbc08ed4e1fa
+					logError("Unable to save batch job manifest to ss3. err: " + uploadResponse.Output)
 					return true
 				}
 				

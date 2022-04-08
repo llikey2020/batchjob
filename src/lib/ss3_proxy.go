@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -127,7 +126,7 @@ func deleteObject(bucketName string, fileType FileType, fileName string, isShare
 func getObject(bucketName string, fileType FileType, fileName string, isShared bool) (output *s3.GetObjectOutput, err error) {
 	s3Client, err := createS3Client()
 	if err != nil {
-		log.Println("Unable to create S3 client: ", err)
+		logError("Unable to create S3 client: " + err.Error())
 		return nil, err
 	}
 
@@ -139,7 +138,7 @@ func getObject(bucketName string, fileType FileType, fileName string, isShared b
 		Key:    aws.String(objectKey),
 	})
 	if err != nil {
-		log.Println("Unable to get object from S3 Bucket " + bucketName + ":", err)
+		logError("Unable to get object from S3 Bucket " + bucketName + ": " + err.Error())
 		return nil, err
 	}
 
@@ -156,9 +155,9 @@ func SS3UploadFile(w http.ResponseWriter, r *http.Request) {
 	bucketName := vars["bucketName"]
 	fileType := FileType(vars["fileType"])
 	if _, ok := SupportedFileTypes[fileType]; !ok {
-		log.Println("Unsupported file type:", fileType)
+		logError("Unsupported file type: " + string(fileType))
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Unsupported file type:" + fileType))
+		w.Write([]byte("Unsupported file type: " + string(fileType)))
 		return
 	}
 
@@ -204,9 +203,9 @@ func SS3DeleteObject(w http.ResponseWriter, r *http.Request) {
 	bucketName := vars["bucketName"]
 	fileType := FileType(vars["fileType"])
 	if _, ok := SupportedFileTypes[fileType]; !ok {
-		log.Println("Unsupported file type:", fileType)
+		logError("Unsupported file type: " + string(fileType))
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Unsupported file type:" + fileType))
+		w.Write([]byte("Unsupported file type:" + string(fileType)))
 		return
 	}
 

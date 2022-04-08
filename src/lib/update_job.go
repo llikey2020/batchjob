@@ -8,7 +8,6 @@ import (
 	"github.com/jinzhu/copier"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -142,7 +141,7 @@ func updateManifestSpec(manifestSpec *batchJobSpec, spec *updateBatchJobSpec) (e
 func getAndUpdateManifest(fileName string, spec updateBatchJobSpec) (err error) {
 	objectOutput, err := getObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
 	if err != nil {
-		log.Println("Unable to get batch job manifest from S3. err: ", err)
+		logError("Unable to get batch job manifest from S3. err: " + err.Error())
 		return err
 	}
 
@@ -157,8 +156,8 @@ func getAndUpdateManifest(fileName string, spec updateBatchJobSpec) (err error) 
 		return err
 	}
 
-	log.Printf("%+v\n", manifest)
-	log.Printf("%+v\n", spec)
+	logInfof("%+v\n", manifest)
+	logInfof("%+v\n", spec)
 
 	// update properties in yaml
 	err = updateManifestSpec(&manifest.Spec, &spec)
@@ -180,7 +179,7 @@ func getAndUpdateManifest(fileName string, spec updateBatchJobSpec) (err error) 
 func getAndUpdateScheduledManifest(fileName string, spec updateScheduledBatchJobSpec) (err error) {
 	objectOutput, err := getObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
 	if err != nil {
-		log.Println("Unable to get batch job manifest from S3. err: ", err)
+		logError("Unable to get batch job manifest from S3. err: " + err.Error())
 		return err
 	}
 
@@ -253,7 +252,6 @@ func updateJob(jobName string, spec updateBatchJobSpec) (response serviceRespons
 	fileName := jobName + manifestFileSuffix
 	err = getAndUpdateManifest(fileName, spec)
 	if err != nil {
-		log.Println("Unable to update batch job manifest file. err: ", err.Error())
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to update batch job manifest file. err: " + err.Error()
 		return
@@ -316,7 +314,6 @@ func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (respo
 	fileName := jobName + scheduledManifestFileSuffix
 	err = getAndUpdateScheduledManifest(fileName, spec)
 	if err != nil {
-		log.Println("Unable to update scheduled batch job manifest file in S3. err: ", err.Error())
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to update scheduled batch job manifest file in S3. err: " + err.Error()
 		return

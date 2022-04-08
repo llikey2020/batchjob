@@ -44,6 +44,10 @@ func logInfow(msg string, keysAndValues ...interface{}) {
 	logger.Infow(msg, keysAndValues)
 }
 
+func logInfof(template string, args ...interface{}) {
+	logger.Infof(template, args)
+}
+
 func logWarning(msg string) {
 	logger.Warn(msg)
 }
