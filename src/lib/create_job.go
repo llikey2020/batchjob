@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"errors"
@@ -95,6 +96,7 @@ type batchJobSpecSparkConf struct {
 	SparkHistoryFsLogDirectory              string `yaml:"spark.history.fs.logDirectory,omitempty"`
 	SparkHistoryProvider                    string `yaml:"spark.history.provider,omitempty"`
 	SparkKubernetesContainerImagePullPolicy string `yaml:"spark.kubernetes.container.image.pullPolicy,omitempty"`
+	SparkUiPrometheusEnabled                string `yaml:"spark.ui.prometheus.enabled"`
 }
 
 // batchJobSpecSparkPodSpec holds fields which define common things for a Spark driver or executor pod.
@@ -227,6 +229,7 @@ func createBatchJobSpecSparkConf(batchJobSpecSparkConf *batchJobSpecSparkConf) {
 	batchJobSpecSparkConf.SparkSqlSequoiadpMetaserviceUri = SPARKJOB_SPARKCONFS["spark.sql.sequoiadp.metaservice.uri"]
 	batchJobSpecSparkConf.SparkHistoryFsLogDirectory = SPARKJOB_SPARKCONFS["spark.history.fs.logDirectory"]
 	batchJobSpecSparkConf.SparkHistoryProvider = SPARKJOB_SPARKCONFS["spark.history.provider"]
+	batchJobSpecSparkConf.SparkUiPrometheusEnabled = SPARKJOB_SPARKCONFS["spark.ui.prometheus.enabled"]
 }
 
 // createBatchJobSpecRestartPolicy populates batch job restart policy with values from SPARKJOB_CONFS.
@@ -276,7 +279,9 @@ func createBatchJobSpec(jobSpecTemplate *batchJobSpec) {
 	createBatchJobSpecSparkConf(&jobSpecTemplate.SparkConf)
 	createBatchJobSpecDriver(&jobSpecTemplate.Driver)
 	createBatchJobSpecExecutor(&jobSpecTemplate.Executor)
-	jobSpecTemplate.Monitoring = createBatchJobSpecMonitoring()
+	if strings.ToLower(SPARKJOB_CONFS["SPARKJOB_ENABLE_METRICS"]) == "true" {
+		jobSpecTemplate.Monitoring = createBatchJobSpecMonitoring()
+	}
 }
 
 // createScheduledBatchJobSpec populates the scheduledBatchJobSpec struct with values in batchJobSpec and batchJobSchedule from a batchJobRequest.
@@ -383,11 +388,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
 	}
 
 	response.Status = http.StatusOK
-<<<<<<< HEAD
 	response.Output = "Created sparkapplication: "+ result.GetName()
-=======
-	response.Output = "Created sparkapplication " + result.GetName()
->>>>>>> 3af19b1 (enabling prometheus metrics support - rebasing with latest master)
 	return
 }
 
@@ -466,11 +467,7 @@ func applyManifest(sparkJobManifest []byte, jobName string) (response serviceRes
 }
 
 // nonRepeatScheduledJobCleanup periodically checks nonRepeatJobsSync map of scheduled jobs that should only run once.
-<<<<<<< HEAD
 // Will update 
-=======
-// Will
->>>>>>> 3af19b1 (enabling prometheus metrics support - rebasing with latest master)
 func nonRepeatScheduledJobCleanup() {
 	ticker := time.NewTicker(15 * time.Second)
 	i := 1
@@ -643,11 +640,7 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&batchJobReq); err != nil {
 		logError("Cannot decode request body: "+ err.Error())
 		w.WriteHeader(http.StatusBadRequest)
-<<<<<<< HEAD
 		w.Write([]byte("400 - Cannot decode request body: "+ err.Error()))
-=======
-		w.Write([]byte("400 - Cannot decode request body:" + err.Error()))
->>>>>>> 3af19b1 (enabling prometheus metrics support - rebasing with latest master)
 		return
 	}
 	verifyRequestResponse := verifyCreateJobRequestBody(false, batchJobReq)
@@ -695,84 +688,16 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	// Get request
 	var batchJobReq batchJobRequest
 	if err := decoder.Decode(&batchJobReq); err != nil {
-<<<<<<< HEAD
 		logError("Cannot decode request body: "+ err.Error())
-=======
-		log.Println("Cannot decode request body", err)
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Cannot decode request body:" + err.Error()))
-		return
-	}
-	// error 400 checking for mandatory fields and valid values
-	if batchJobReq.Metadata.Name == "" {
-		log.Println("Missing metadata: name")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing metadata: name"))
-		return
-	} else if match, _ := regexp.MatchString(nameRegex, batchJobReq.Metadata.Name); !match {
-		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - " + "Invalid name: " + batchJobReq.Metadata.Name + ". must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')"))
-		return
-	} else if len(batchJobReq.Metadata.Name) >= 64 {
-		log.Println("Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters.")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Invalid name: " + batchJobReq.Metadata.Name + ": must be no more than 63 characters."))
-		return
-	} else if batchJobReq.Spec.Type == "" || batchJobReq.Spec.MainClass == "" || batchJobReq.Spec.MainApplicationFile == "" {
-		log.Println("Missing one of spec parameters: type, mainClass, or mainApplicationFile")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing one of spec parameters: type, mainClass, or mainApplicationFile"))
-		return
-	} else if batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Cores == 0 || batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Memory == "" {
-		log.Println("Missing one of driver parameters: cores, or memory")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing one of driver parameters: cores, or memory"))
-		return
-	} else if batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Cores == 0 || batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Memory == "" {
-		log.Println("Missing one of executor parameters: cores, or memory")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Missing one of executor parameters: cores, or memory"))
-		return
-	} else if batchJobReq.Schedule.ConcurrencyPolicy == "" {
-		log.Println("Missing schedule parameters: concurrencyPolicy")
->>>>>>> 3af19b1 (enabling prometheus metrics support - rebasing with latest master)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 - Cannot decode request body: "+ err.Error()))
 		return
 	}
-<<<<<<< HEAD
 	verifyRequestResponse := verifyCreateJobRequestBody(true, batchJobReq)
 	if verifyRequestResponse.Status != http.StatusOK {
 		logError("Invalid request: " + verifyRequestResponse.Output)
 		w.WriteHeader(verifyRequestResponse.Status)
 		w.Write([]byte(strconv.Itoa(verifyRequestResponse.Status) + " - Invalid request: " + verifyRequestResponse.Output))
-=======
-
-	// error 400 for invalid format and input
-	_, err := cron.ParseStandard(batchJobReq.Schedule.CronSchedule)
-	if err != nil {
-		log.Println("Invalid cron schedule format: " + err.Error())
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Invalid cron schedule format: " + err.Error()))
-		return
-	}
-	// check concurrencyPolicy is one of "Allow", "Forbid", "Replace". Check
-	if batchJobReq.Schedule.ConcurrencyPolicy != "Allow" && batchJobReq.Schedule.ConcurrencyPolicy != "Forbid" && batchJobReq.Schedule.ConcurrencyPolicy != "Replace" {
-		log.Println("Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace"))
-		return
-	} else if batchJobReq.Schedule.RunHistoryLimit < 0 || batchJobReq.Schedule.SuccessfulRunHistoryLimit < 0 || batchJobReq.Schedule.FailedRunHistoryLimit < 0 {
-		log.Println("Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0"))
-		return
-	} else if batchJobReq.Schedule.RunHistoryLimit != 0 && (batchJobReq.Schedule.SuccessfulRunHistoryLimit != 0 || batchJobReq.Schedule.FailedRunHistoryLimit != 0) {
-		log.Println("Not allowed to set RunHistoryLimit and (SuccessfulRunHistoryLimit + FailedRunHistoryLimit). Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit + FailedRunHistoryLimit)")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Not allowed to set RunHistoryLimit and (SuccessfulRunHistoryLimit + FailedRunHistoryLimit). Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit + FailedRunHistoryLimit)"))
->>>>>>> 3af19b1 (enabling prometheus metrics support - rebasing with latest master)
 		return
 	}
 

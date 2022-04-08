@@ -47,13 +47,10 @@ sparkJob:
     spark.hadoop.fs.s3a.access.key:                          ABCDEFGHIJKLMNOPQRST
     spark.hadoop.fs.s3a.secret.key:                          abcdefghijklmnopqrstuvwxyz0123456789ABCD
     spark.hadoop.fs.s3a.impl:                                org.apache.hadoop.fs.s3a.S3AFileSystem
-    spark.hadoop.fs.s3a.connection.ssl.enabled:              false
-  monitoring:
-    exposeDriverMetrics: true
-    exposeExecutorMetrics: true
-    prometheus:
-      jmxExporterJar: "/prometheus/jmx_prometheus_javaagent-0.11.0.jar"
-      port: 8090
+    spark.hadoop.fs.s3a.connection.ssl.enabled:              "false"
+    spark.ui.prometheus.enabled:                             "true"
+  metrics:
+    enabled: "true"
   driver:
     javaOptions: -Dalluxio.master.rpc.addresses=alluxio-master-0:19998
   executor:

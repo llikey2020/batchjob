@@ -68,6 +68,8 @@ spec:
               value: {{ .executor.javaOptions }}
             - name: SPARKJOB_SPARKCONF
               value: {{ range $val := $jobSparkConfs }}{{ printf "%v " $val }}{{ end }}
+            - name: SPARKJOB_ENABLE_METRICS
+              value: "{{ .metrics.enabled }}"
           {{- end }}
             - name: SPARK_EVENTLOG_DIR
               value: {{ .Values.sparkEventLogDir }}
