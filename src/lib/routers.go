@@ -42,6 +42,7 @@ func init() {
 	}
 
 	S3_BUCKET_NAME = os.Getenv("S3A_BUCKET_NAME")
+	initializeLogging()
 }
 
 func HandleRequests() {
