@@ -2,7 +2,6 @@ package batchjob
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"context"
@@ -77,7 +76,6 @@ func createRunBatchJobManifest(job *runBatchJobManifest, jobName string, jobRunN
 func runJob(jobName string, arguments []string) (response serviceResponse) {
 	getSparkAppResponse := getSparkApplication(jobName)
 	if getSparkAppResponse.Status != http.StatusOK {
-		log.Println("Unable to get SparkApplication:", jobName, " err: ", getSparkAppResponse.ErrMessage)
 		response.Status = http.StatusNotFound
 		response.Output = "Unable to get SparkApplication:" + jobName + " err: " + getSparkAppResponse.ErrMessage
 		return
@@ -88,7 +86,6 @@ func runJob(jobName string, arguments []string) (response serviceResponse) {
 	// Check SparkApplication labels if it's a job run
 	labels := sparkApp.GetLabels()
 	if val, prs := labels["sparkAppType"]; prs && val == RunSparkAppType {
-		log.Println("Cannot create run off run type SparkApplication: ", jobName)
 		response.Status = http.StatusBadRequest
 		response.Output = "Cannot create run off run type SparkApplication: " + jobName
 		return
@@ -97,14 +94,12 @@ func runJob(jobName string, arguments []string) (response serviceResponse) {
 	jobRunName := string(uid) + "-" + jobName + "-"
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create a dynamic client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create a dynamic client. err: " + err.Error()
 		return
@@ -115,14 +110,12 @@ func runJob(jobName string, arguments []string) (response serviceResponse) {
 	createRunBatchJobManifest(&obj, jobName, jobRunName, arguments, spec)
 	data, err := json.Marshal(obj)
 	if err != nil {
-		log.Println("Unable to create JSON. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create JSON. err: " + err.Error()
 		return
 	}
 	deployment := &unstructured.Unstructured{}
 	if err := json.Unmarshal(data, &deployment); err != nil {
-		log.Println("Unable to create unstructured: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create unstructured: " + err.Error()
 		return
@@ -134,7 +127,6 @@ func runJob(jobName string, arguments []string) (response serviceResponse) {
 		Namespace(SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]).
 		Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
-		log.Println("Unable to create SparkApplication: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create SparkApplication: " + err.Error()
 		return
@@ -145,36 +137,36 @@ func runJob(jobName string, arguments []string) (response serviceResponse) {
 	return
 }
 
-// runBatchJob is the handler for POST: /job/run
+// runBatchJob is the handler for POST: /jobs/run
 // It creates a run of an existing batch job.
 // This creates a run by creating a new SparkApplication based off the existing job.
 // Writes a response containing a success or failure message.
 func runBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit rerun job endpoint")
+	logInfo("Hit run job endpoint")
 	decoder := json.NewDecoder(r.Body)
 	var runJobReq runJobRequest
 	if err := decoder.Decode(&runJobReq); err != nil {
-		log.Println("Cannot decode request body", err)
+		logError("Cannot decode request body: "+ err.Error())
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Cannot decode request body:"+ err.Error()))
+		w.Write([]byte("400 - Cannot decode request body: "+ err.Error()))
 		return
 	}
 	runJobResponse:= runJob(runJobReq.JobName, runJobReq.Arguments)
 	if runJobResponse.Status != http.StatusOK {
-		log.Println("Error creating job run:", runJobResponse.Output)
+		logError("Failed to create batch job run: " + runJobResponse.Output)
 		w.WriteHeader(runJobResponse.Status)
-		w.Write([]byte(strconv.Itoa(runJobResponse.Status) + " - Failed to create batch job run:" + runJobResponse.Output))
+		w.Write([]byte(strconv.Itoa(runJobResponse.Status) + " - Failed to create batch job run: " + runJobResponse.Output))
 		return
 	}
 
 	response, err := json.Marshal(runJobResponse)
 	if err != nil {
-		log.Println("Failed to encode jobs list", err)
+		logError("Failed to encode response. error: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Failed to encode jobs list: " + err.Error()))
+		w.Write([]byte("500 - Failed to encode response. error: " + err.Error()))
 		return
 	}
-	
+	logInfo(runJobResponse.Output + ", for job: "+ runJobReq.JobName)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }

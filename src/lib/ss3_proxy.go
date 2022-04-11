@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -62,7 +61,6 @@ func uploadFile(bucketName string, fileType FileType, fileName string, isShared 
 				file io.ReadSeeker) (response serviceResponse) {
 	s3Client, err := createS3Client()
 	if err != nil {
-		log.Println("Unable to create S3 client: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create S3 client: " + err.Error()
 		return
@@ -77,14 +75,13 @@ func uploadFile(bucketName string, fileType FileType, fileName string, isShared 
 		Body:   file,
 	})
 	if err != nil {
-		log.Println("Unable to put object into S3 Bucket " + bucketName + ":", err)
 		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to put object into S3 Bucket " + bucketName + ":" + err.Error()
+		response.Output = "Unable to put object into S3 Bucket: " + bucketName + ", err: " + err.Error()
 		return
 	}
 
 	response.Status = http.StatusOK
-	response.Output = "Uploaded file to S3 bucket: " + bucketName + " with object key:" + objectKey
+	response.Output = "Uploaded file to S3 bucket: " + bucketName + " with object key: " + objectKey
 	return
 }
 
@@ -103,7 +100,6 @@ func generateRootFolder(fileType FileType, userName string, isShared bool) strin
 func deleteObject(bucketName string, fileType FileType, fileName string, isShared bool) (response serviceResponse) {
 	s3Client, err := createS3Client()
 	if err != nil {
-		log.Println("Unable to create S3 client: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create S3 client: " + err.Error()
 		return
@@ -117,21 +113,20 @@ func deleteObject(bucketName string, fileType FileType, fileName string, isShare
 		Key:    aws.String(objectKey),
 	})
 	if err != nil {
-		log.Println("Unable to delete object from S3 Bucket " + bucketName + ":", err)
 		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to delete object from S3 Bucket " + bucketName + ":" + err.Error()
+		response.Output = "Unable to delete object from S3 Bucket " + bucketName + ": " + err.Error()
 		return
 	}
 
 	response.Status = http.StatusOK
-	response.Output = "Deleted file from S3 bucket: " + bucketName + " with object key:" + objectKey
+	response.Output = "Deleted file from S3 bucket: " + bucketName + " with object key: " + objectKey
 	return
 }
 
 func getObject(bucketName string, fileType FileType, fileName string, isShared bool) (output *s3.GetObjectOutput, err error) {
 	s3Client, err := createS3Client()
 	if err != nil {
-		log.Println("Unable to create S3 client: ", err)
+		logError("Unable to create S3 client: " + err.Error())
 		return nil, err
 	}
 
@@ -143,7 +138,7 @@ func getObject(bucketName string, fileType FileType, fileName string, isShared b
 		Key:    aws.String(objectKey),
 	})
 	if err != nil {
-		log.Println("Unable to get object from S3 Bucket " + bucketName + ":", err)
+		logError("Unable to get object from S3 Bucket " + bucketName + ": " + err.Error())
 		return nil, err
 	}
 
@@ -160,9 +155,9 @@ func SS3UploadFile(w http.ResponseWriter, r *http.Request) {
 	bucketName := vars["bucketName"]
 	fileType := FileType(vars["fileType"])
 	if _, ok := SupportedFileTypes[fileType]; !ok {
-		log.Println("Unsupported file type:", fileType)
+		logError("Unsupported file type: " + string(fileType))
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Unsupported file type:" + fileType))
+		w.Write([]byte("Unsupported file type: " + string(fileType)))
 		return
 	}
 
@@ -171,16 +166,16 @@ func SS3UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	f, _, err := r.FormFile("file")
 	if err != nil {
-		log.Println("Unable to read file from multipart/form-data:", err)
+		logError("Unable to read file from multipart/form-data: " + err.Error())
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Unable to read file from multipart/form-data:" + err.Error()))
+		w.Write([]byte("Unable to read file from multipart/form-data: " + err.Error()))
 		return
 	}
 	defer f.Close()
 
 	uploadResponse := uploadFile(bucketName, fileType, fileName, isShared, f)
 	if uploadResponse.Status != http.StatusOK {
-		log.Println("Error uploading to SS3: ", uploadResponse.Output)
+		logError("Error uploading to SS3: " + uploadResponse.Output)
 		w.WriteHeader(uploadResponse.Status)
 		w.Write([]byte(strconv.Itoa(uploadResponse.Status) + " - Error uploading to SS3: " + uploadResponse.Output))
 		return
@@ -188,12 +183,12 @@ func SS3UploadFile(w http.ResponseWriter, r *http.Request) {
 	// encode response
 	response, err := json.Marshal(uploadResponse)
 	if err != nil {
-		log.Println("Failed to encode response", err)
+		logError("Failed to encode a response: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Unable to encode a response:" + err.Error()))
+		w.Write([]byte("500 - Failed to encode a response: " + err.Error()))
 		return
 	}
-
+	logInfo(uploadResponse.Output)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
@@ -208,9 +203,9 @@ func SS3DeleteObject(w http.ResponseWriter, r *http.Request) {
 	bucketName := vars["bucketName"]
 	fileType := FileType(vars["fileType"])
 	if _, ok := SupportedFileTypes[fileType]; !ok {
-		log.Println("Unsupported file type:", fileType)
+		logError("Unsupported file type: " + string(fileType))
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Unsupported file type:" + fileType))
+		w.Write([]byte("Unsupported file type:" + string(fileType)))
 		return
 	}
 
@@ -219,7 +214,7 @@ func SS3DeleteObject(w http.ResponseWriter, r *http.Request) {
 
 	deleteObjectResponse := deleteObject(bucketName, fileType, fileName, isShared)
 	if deleteObjectResponse.Status != http.StatusOK {
-		log.Println("Error deleting from SS3: ", deleteObjectResponse.Output)
+		logError("Error deleting from SS3: " + deleteObjectResponse.Output)
 		w.WriteHeader(deleteObjectResponse.Status)
 		w.Write([]byte(strconv.Itoa(deleteObjectResponse.Status) + " - Error deleting from SS3: " + deleteObjectResponse.Output))
 		return
@@ -227,12 +222,12 @@ func SS3DeleteObject(w http.ResponseWriter, r *http.Request) {
 	// encode response
 	response, err := json.Marshal(deleteObjectResponse)
 	if err != nil {
-		log.Println("Failed to encode response", err)
+		logError("Failed to encode a response: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Unable to encode a response:" + err.Error()))
+		w.Write([]byte("500 - Failed to encode a response: " + err.Error()))
 		return
 	}
-
+	logInfo(deleteObjectResponse.Output)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }

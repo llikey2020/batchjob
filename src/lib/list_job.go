@@ -8,13 +8,14 @@ import (
 	"strconv"
 	"context"
 	"sort"
+	"errors"
 
 	"github.com/gorilla/mux"
 	"github.com/olekukonko/tablewriter"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -112,14 +113,12 @@ func getSparkApplication(jobName string) (response sparkApplicationResponse) {
 	// get config and clientset
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an kubernetes client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an kubernetes client. err: " + err.Error()
 		return
@@ -133,15 +132,11 @@ func getSparkApplication(jobName string) (response sparkApplicationResponse) {
 		Name(jobName).
 		Do(context.TODO()).
 		Into(&res)
-	if errors.IsNotFound(err) {
-		log.Println("Unable to get SparkApplication. err: ", err)
-		response.Status = http.StatusNotFound
-		response.ErrMessage = "Unable to get SparkApplication. err: " + err.Error()
-		return
-	} else if err != nil {
-		log.Println("Reason for error:", errors.ReasonForError(err))
-		log.Println("Unable to get SparkApplication. err: ", err)
+	if err != nil {
 		response.Status = http.StatusInternalServerError
+		if status := k8serrors.APIStatus(nil); errors.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
 		response.ErrMessage = "Unable to get SparkApplication. err: " + err.Error()
 		return
 	}
@@ -155,14 +150,12 @@ func getSparkApplication(jobName string) (response sparkApplicationResponse) {
 // Returns the batch job with the given Spark Application Id.
 // If SparkApplication with given Id can't be found, returns an empty batchJob
 func getJobFromId(id string) batchJob {
-	log.Println("getting job with id: ", id)
 	allJobRes := listJobs(false, false)
 	for _, job := range allJobRes.Jobs {
 		if job.Id == id {
 			return job
 		}
 	}
-	log.Println("No job with id: ", id)
 	return batchJob{}
 }
 
@@ -259,14 +252,12 @@ func readScheduledSparkApplicationsIntoScheduledBatchJob(items []ScheduledSparkA
 func listJobs(onlyRunning bool, noRuns bool) (response batchJobsResponse) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an kubernetes client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an kubernetes client. err: " + err.Error()
 		return
@@ -279,14 +270,13 @@ func listJobs(onlyRunning bool, noRuns bool) (response batchJobsResponse) {
 		Do(context.TODO()).
 		Into(&res)
 	if err != nil {
-		log.Println("Reason for error", errors.ReasonForError(err))
-		log.Println("Unable to get SparkApplications. err: ", err)
 		response.Status = http.StatusInternalServerError
+		if status := k8serrors.APIStatus(nil); errors.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
 		response.ErrMessage = "Unable to get SparkApplications. err: " + err.Error()
 		return
 	}
-	// print jobs for logging purposes
-	printJobs(res.Items)
 	response.Jobs = readSparkApplicationsIntoBatchJob(res.Items, onlyRunning, noRuns)
 
 	response.Status = http.StatusOK
@@ -310,14 +300,12 @@ func getPastScheduledJobRuns(pastRunNames []string) (sparkAppList []SparkApplica
 func listScheduledJobs() (response scheduledBatchJobsResponse) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an kubernetes client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an kubernetes client. err: " + err.Error()
 		return
@@ -330,9 +318,10 @@ func listScheduledJobs() (response scheduledBatchJobsResponse) {
 		Do(context.TODO()).
 		Into(&res)
 	if err != nil {
-		log.Println("Reason for error", errors.ReasonForError(err))
-		log.Println("Unable to get ScheduledSparkApplications. err: ", err)
 		response.Status = http.StatusInternalServerError
+		if status := k8serrors.APIStatus(nil); errors.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
 		response.ErrMessage = "Unable to get ScheduledSparkApplications. err: " + err.Error()
 		return
 	}
@@ -348,14 +337,12 @@ func listScheduledJobs() (response scheduledBatchJobsResponse) {
 func getScheduledSparkApplication(jobName string) (response scheduledSparkApplicationResponse) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an kubernetes client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an kubernetes client. err: " + err.Error()
 		return
@@ -368,15 +355,11 @@ func getScheduledSparkApplication(jobName string) (response scheduledSparkApplic
 		Name(jobName).
 		Do(context.TODO()).
 		Into(&res)
-	if errors.IsNotFound(err) {
-		log.Println("Unable to get ScheduledSparkApplication. err: ", err)
-		response.Status = http.StatusNotFound
-		response.ErrMessage = "Unable to get ScheduledSparkApplication. err: " + err.Error()
-		return
-	} else if err != nil {
-		log.Println("Reason for error:", errors.ReasonForError(err))
-		log.Println("Unable to get ScheduledSparkApplication. err: ", err)
+	if err != nil {
 		response.Status = http.StatusInternalServerError
+		if status := k8serrors.APIStatus(nil); errors.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
 		response.ErrMessage = "Unable to get ScheduledSparkApplication. err: " + err.Error()
 		return
 	}
@@ -403,24 +386,26 @@ func getScheduledJob(jobName string) (response scheduledBatchJobResponse) {
 	return
 }
 
-// getBatchJobs is the handler for GET: /jobs
+// getBatchJobs is the handler for GET: /jobs/list
 // It gets SparkApplications (that don't have the sparkAppType=RunSparkAppType label) and reads each SparkApplication into batchJob type.
 // Writes a response with a list of batch jobs.
 // On failure, writes an error message in response.
 func getBatchJobs(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit list jobs endpoint")
+	logInfo("Hit list jobs endpoint")
 	var onlyRunning bool = false
 	if r.URL.Query().Get("running") != "" {
 		var err error
 		onlyRunning, err = strconv.ParseBool(r.URL.Query().Get("running"))
 		if err != nil {
-			log.Println("Invalid value for query running. Accepts true|false. err: ", err)
+			logError("Invalid value for query running. Accepts true|false. err: " + err.Error())
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(strconv.Itoa(http.StatusBadRequest) + "- Invalid value for query running. Accepts true|false. err: " + err.Error()))
 			return
 		}
 	}
 	listJobsResponse := listJobs(onlyRunning, true)
 	if listJobsResponse.Status != http.StatusOK {
-		log.Println("Unable to get SparkApplications: ", listJobsResponse.ErrMessage)
+		logError("Unable to get SparkApplications: " + listJobsResponse.ErrMessage)
 		w.WriteHeader(listJobsResponse.Status)
 		w.Write([]byte(strconv.Itoa(listJobsResponse.Status) + " - Unable to get SparkApplications: " + listJobsResponse.ErrMessage))
 		return
@@ -428,11 +413,12 @@ func getBatchJobs(w http.ResponseWriter, r *http.Request) {
 
 	response, err := json.Marshal(listJobsResponse)
 	if err != nil {
-		log.Println("Failed to encode jobs list", err)
+		logError("Failed to encode jobs list: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Failed to encode jobs list: " + err.Error()))
 		return
 	}
+	logInfo("Successfully get batch jobs")
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
@@ -441,15 +427,15 @@ func getBatchJobs(w http.ResponseWriter, r *http.Request) {
 * handler for GET: /scheduledjobs
 * get all scheduledjobs
 **/
-// getScheduledBatchJobs is the handler for GET: /scheduledjobs
+// getScheduledBatchJobs is the handler for GET: /scheduledjobs/list
 // It gets ScheduledSparkApplications and reads each ScheduledSparkApplication into scheduledBatchJob type.
 // Writes a response with a list of scheduled batch jobs.
 // On failure, writes an error message in response.
 func getScheduledBatchJobs(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit list scheduled jobs endpoint")
+	logInfo("Hit list scheduled jobs endpoint")
 	listJobsResponse := listScheduledJobs()
 	if listJobsResponse.Status != http.StatusOK {
-		log.Println("Unable to get ScheduledSparkApplications: ", listJobsResponse.ErrMessage)
+		logError("Unable to get ScheduledSparkApplications: " + listJobsResponse.ErrMessage)
 		w.WriteHeader(listJobsResponse.Status)
 		w.Write([]byte(strconv.Itoa(listJobsResponse.Status) + " - Unable to get ScheduledSparkApplications: " + listJobsResponse.ErrMessage))
 		return
@@ -457,26 +443,27 @@ func getScheduledBatchJobs(w http.ResponseWriter, r *http.Request) {
 
 	response, err := json.Marshal(listJobsResponse)
 	if err != nil {
-		log.Println("Failed to encode scheduled jobs list", err)
+		logError("Failed to encode scheduled jobs list: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Failed to encode scheduled jobs list: " + err.Error()))
 		return
 	}
+	logInfo("Successfully get scheduled batch jobs")
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
 
-// getScheduledBatchJobs is the handler for GET: /scheduledjob/{name}
+// getScheduledBatchJobs is the handler for GET: /scheduledjobs/get/{name}
 // It gets a ScheduledSparkApplication with the given name and reads it into a scheduledBatchJob type.
 // Writes a response with a scheduled batch job.
 // On failure, writes an error message in response.
 func getScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit get scheduled job endpoint")
+	logInfo("Hit get scheduled job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	getJobResponse := getScheduledJob(jobName)
 	if getJobResponse.Status != http.StatusOK {
-		log.Println("Unable to get ScheduledSparkApplication: ", getJobResponse.ErrMessage)
+		logError("Unable to get ScheduledSparkApplication: " + getJobResponse.ErrMessage)
 		w.WriteHeader(getJobResponse.Status)
 		w.Write([]byte(strconv.Itoa(getJobResponse.Status) + " - Unable to get ScheduledSparkApplication: " + getJobResponse.ErrMessage))
 		return
@@ -484,11 +471,12 @@ func getScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 
 	response, err := json.Marshal(getJobResponse)
 	if err != nil {
-		log.Println("Failed to encode scheduled jobs list", err)
+		logError("Failed to encode scheduled jobs list: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Failed to encode scheduled jobs list: " + err.Error()))
 		return
 	}
+	logInfo("Successfully get scheduled batch job: " + jobName)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
@@ -506,18 +494,15 @@ type batchJobRunsResponse struct {
 // If includeOriginalJob = true, will include the job with name = jobName in the list of runs returned.
 // Returns a list of batchJob representing the runs in chronological order of creation.
 func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batchJobsResponse) {
-	log.Println("getting job with name: ", jobName)
 	// use dynamic client and LabelSelector in ListOptions
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create a dynamic client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create a dynamic client. err: " + err.Error()
 		return
@@ -532,7 +517,6 @@ func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batch
 			LabelSelector: runLabels,
 		})
 	if err != nil {
-		log.Println("Unable to get SparkApplications: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to get SparkApplications: " + err.Error()
 		return
@@ -541,7 +525,6 @@ func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batch
 	// Marshal Items(type: []Unstructured) then Unmarshal into []SparkApplication type
 	jsonData, err := json.Marshal(result.Items)
 	if err != nil {
-		log.Println("Unable to Marshal SparkApplications: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to Marshal SparkApplications: " + err.Error()
 		return
@@ -549,7 +532,6 @@ func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batch
 	var sparkAppList []SparkApplication
 	err = json.Unmarshal(jsonData, &sparkAppList)
 	if err != nil {
-		log.Println("Unable to Unmarshal SparkApplications: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to Unmarshal SparkApplications: " + err.Error()
 		return
@@ -585,17 +567,17 @@ func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batch
 	return 
 }
 
-// getBatchJobRuns is the handler for GET: /job/{name}
+// getBatchJobRuns is the handler for GET: /jobs/get/{name}
 // It gets all created runs of the batch job with the name in the request URL.
 // Writes a response with a list of runs.
 // On failure, writes an error message in response.
 func getBatchJobRuns(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit get job runs endpoint")
+	logInfo("Hit get job runs endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	runsResponse := getRunsFromJobName(jobName, true)
 	if runsResponse.Status != http.StatusOK {
-		log.Println("Unable to get job runs for job: ", jobName, ", err:", runsResponse.ErrMessage)
+		logError("Unable to get job runs for job:" + jobName + ", err:" + runsResponse.ErrMessage)
 		w.WriteHeader(runsResponse.Status)
 		w.Write([]byte(strconv.Itoa(runsResponse.Status) + " - Unable to get job runs for job:" + jobName + ", err:" + runsResponse.ErrMessage))
 		return
@@ -607,11 +589,12 @@ func getBatchJobRuns(w http.ResponseWriter, r *http.Request) {
 	batchJobRunsResponse.Runs = runsResponse.Jobs
 	response, err := json.Marshal(batchJobRunsResponse)
 	if err != nil {
-		log.Println("Failed to encode response. error:", err)
+		logError("Failed to encode response. error: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Failed to encode response. error: " + err.Error()))
 		return
 	}
+	logInfo("Successfully got runs for batch job: " + jobName)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }

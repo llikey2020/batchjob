@@ -42,10 +42,12 @@ func init() {
 	}
 
 	S3_BUCKET_NAME = os.Getenv("S3A_BUCKET_NAME")
+	initializeLogging()
 }
 
 func HandleRequests() {
 	router := mux.NewRouter().StrictSlash(true)
+	router.HandleFunc("/healthcheck", healthCheck).Methods("GET")
 	router.HandleFunc("/jobs/create", createBatchJob).Methods("POST")
 	router.HandleFunc("/jobs/list", getBatchJobs).Methods("GET")
 	router.HandleFunc("/jobs/get/{name}", getBatchJobRuns).Methods("GET")

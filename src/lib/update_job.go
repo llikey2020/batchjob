@@ -8,18 +8,17 @@ import (
 	"github.com/jinzhu/copier"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/robfig/cron"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // updateBatchJobSpecRestartPolicy holds fields the user can change for the Restart Policy of the job.
@@ -142,7 +141,7 @@ func updateManifestSpec(manifestSpec *batchJobSpec, spec *updateBatchJobSpec) (e
 func getAndUpdateManifest(fileName string, spec updateBatchJobSpec) (err error) {
 	objectOutput, err := getObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
 	if err != nil {
-		log.Println("Unable to get batch job manifest from S3. err: ", err)
+		logError("Unable to get batch job manifest from S3. err: " + err.Error())
 		return err
 	}
 
@@ -157,8 +156,8 @@ func getAndUpdateManifest(fileName string, spec updateBatchJobSpec) (err error) 
 		return err
 	}
 
-	log.Printf("%+v\n", manifest)
-	log.Printf("%+v\n", spec)
+	logInfof("%+v\n", manifest)
+	logInfof("%+v\n", spec)
 
 	// update properties in yaml
 	err = updateManifestSpec(&manifest.Spec, &spec)
@@ -180,7 +179,7 @@ func getAndUpdateManifest(fileName string, spec updateBatchJobSpec) (err error) 
 func getAndUpdateScheduledManifest(fileName string, spec updateScheduledBatchJobSpec) (err error) {
 	objectOutput, err := getObject(S3_BUCKET_NAME, MANIFEST, fileName, false)
 	if err != nil {
-		log.Println("Unable to get batch job manifest from S3. err: ", err)
+		logError("Unable to get batch job manifest from S3. err: " + err.Error())
 		return err
 	}
 
@@ -222,7 +221,6 @@ func getAndUpdateScheduledManifest(fileName string, spec updateScheduledBatchJob
 func updateJob(jobName string, spec updateBatchJobSpec) (response serviceResponse){
 	getSparkAppResponse := getSparkApplication(jobName)
 	if getSparkAppResponse.Status != http.StatusOK {
-		log.Println("Unable to get SparkApplication:", jobName, " err: ", getSparkAppResponse.ErrMessage)
 		response.Status = http.StatusNotFound
 		response.Output = "Unable to get SparkApplication: " + jobName + ", err: " + getSparkAppResponse.ErrMessage
 		return
@@ -230,14 +228,12 @@ func updateJob(jobName string, spec updateBatchJobSpec) (response serviceRespons
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create a dynamic client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create a dynamic client. err: " + err.Error()
 		return
@@ -247,7 +243,6 @@ func updateJob(jobName string, spec updateBatchJobSpec) (response serviceRespons
 	obj := createUpdateBatchJobManifest(spec)
 	data, err := json.Marshal(obj)
 	if err != nil {
-		log.Println("Unable to create JSON. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create JSON. err: " + err.Error()
 		return
@@ -257,7 +252,6 @@ func updateJob(jobName string, spec updateBatchJobSpec) (response serviceRespons
 	fileName := jobName + manifestFileSuffix
 	err = getAndUpdateManifest(fileName, spec)
 	if err != nil {
-		log.Println("Unable to update batch job manifest file. err: ", err.Error())
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to update batch job manifest file. err: " + err.Error()
 		return
@@ -271,10 +265,11 @@ func updateJob(jobName string, spec updateBatchJobSpec) (response serviceRespons
 			FieldManager: "batch-service",
 		})
 	if err != nil {
-		log.Println("Reason for error", errors.ReasonForError(err))
-		log.Println("Unable to Patch SparkApplication. err: ", err.Error())
 		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to Patch SparkApplication. err: " + err.Error()
+		if status := k8serrors.APIStatus(nil); errs.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
+		response.Output = "Unable to patch SparkApplication. err: " + err.Error()
 		return
 	}
 
@@ -288,7 +283,6 @@ func updateJob(jobName string, spec updateBatchJobSpec) (response serviceRespons
 func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (response serviceResponse){
 	getSparkAppResponse := getScheduledSparkApplication(jobName)
 	if getSparkAppResponse.Status != http.StatusOK {
-		log.Println("Unable to get ScheduledSparkApplication:", jobName, " err: ", getSparkAppResponse.ErrMessage)
 		response.Status = http.StatusNotFound
 		response.Output = "Unable to get ScheduledSparkApplication: " + jobName + ", err: " + getSparkAppResponse.ErrMessage
 		return
@@ -296,14 +290,12 @@ func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (respo
 	// create the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create a dynamic client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create a dynamic client. err: " + err.Error()
 		return
@@ -313,7 +305,6 @@ func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (respo
 	obj := createUpdateScheduledBatchJobManifest(spec)
 	data, err := json.Marshal(obj)
 	if err != nil {
-		log.Println("Unable to create JSON. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to create JSON. err: " + err.Error()
 		return
@@ -323,7 +314,6 @@ func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (respo
 	fileName := jobName + scheduledManifestFileSuffix
 	err = getAndUpdateScheduledManifest(fileName, spec)
 	if err != nil {
-		log.Println("Unable to update scheduled batch job manifest file in S3. err: ", err.Error())
 		response.Status = http.StatusInternalServerError
 		response.Output = "Unable to update scheduled batch job manifest file in S3. err: " + err.Error()
 		return
@@ -337,37 +327,39 @@ func updateScheduledJob(jobName string, spec updateScheduledBatchJobSpec) (respo
 			FieldManager: "batch-service",
 		})
 	if err != nil {
-		log.Println("Reason for error", errors.ReasonForError(err))
-		log.Println("Unable to Patch ScheduledSparkApplication. err: ", err.Error())
 		response.Status = http.StatusInternalServerError
-		response.Output = "Unable to Patch ScheduledSparkApplication. err: " + err.Error()
+		if status := k8serrors.APIStatus(nil); errs.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
+		response.Output = "Unable to patch ScheduledSparkApplication. err: " + err.Error()
 		return
 	}
+	
 
 	response.Status = http.StatusOK
 	response.Output = "Successfully updated job: " + jobName
 	return
 }
 
-// updateBatchJob is the handler for PATCH: /job/{name}
+// updateBatchJob is the handler for PATCH: /jobs/update/{name}
 // Will take a http request containing spec fields to change spec of a job with name in url.
 // Writes a response containing a success or failure message.
 func updateBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit update job endpoint")
+	logInfo("Hit update job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	decoder := json.NewDecoder(r.Body)
 	var updateReq updateBatchJobSpec
 	if err := decoder.Decode(&updateReq); err != nil {
-		log.Println("Cannot decode request body", err)
+		logError("Cannot decode request body: "+ err.Error())
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Cannot decode request body:"+ err.Error()))
+		w.Write([]byte("400 - Cannot decode request body: "+ err.Error()))
 		return
 	}
 	
 	updateResponse := updateJob(jobName, updateReq)
 	if updateResponse.Status != http.StatusOK {
-		log.Println("Error updating job", updateResponse.Output)
+		logError("Failed to update batch job: " + updateResponse.Output)
 		w.WriteHeader(updateResponse.Status)
 		w.Write([]byte(strconv.Itoa(updateResponse.Status) + " - Failed to update batch job: " + updateResponse.Output))
 		return
@@ -375,7 +367,7 @@ func updateBatchJob(w http.ResponseWriter, r *http.Request) {
 
 	response, err := json.Marshal(updateResponse)
 	if err != nil {
-		log.Println("Failed to encode response", err)
+		logError("Failed to encode response: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Failed to encode response: " + err.Error()))
 		return
@@ -384,43 +376,43 @@ func updateBatchJob(w http.ResponseWriter, r *http.Request) {
 	w.Write(response)
 }
 
-// updateScheduledBatchJob is the handler for PATCH: /scheduledjob/{name}
+// updateScheduledBatchJob is the handler for PATCH: /scheduledjobs/update/{name}
 // Will take a http request containing spec fields to change spec of a scheduled job with name in url.
 // Writes a response containing a success or failure message.
 func updateScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit update scheduled job endpoint")
+	logInfo("Hit update scheduled job endpoint")
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 	decoder := json.NewDecoder(r.Body)
 	var updateReq updateScheduledBatchJobSpec
 	if err := decoder.Decode(&updateReq); err != nil {
-		log.Println("Cannot decode request body", err)
+		logError("Cannot decode request body: "+ err.Error())
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 - Cannot decode request body:"+ err.Error()))
+		w.Write([]byte("400 - Cannot decode request body: "+ err.Error()))
 		return
 	}
 	// check if schedule is updated and is valid format
 	if _, err := cron.ParseStandard(updateReq.Schedule); updateReq.Schedule != "" && err != nil {
-		log.Println("Invalid cron schedule format: " + err.Error())
+		logError("Invalid cron schedule format: " + err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 - Invalid cron schedule format: " + err.Error()))
 		return
 	}
 	// check if concurrencyPolicy is updated and is one of "Allow", "Forbid", "Replace"
 	if updateReq.ConcurrencyPolicy != "" && (updateReq.ConcurrencyPolicy != "Allow" && updateReq.ConcurrencyPolicy != "Forbid" && updateReq.ConcurrencyPolicy != "Replace") {
-		log.Println("Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace")
+		logError("Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 - Invalid ConcurrencyPolicy, must be one of: Allow, Forbid, Replace"))
 		return
 	}
 	// check Run History Limit values. restrict to choose RunHistoryLimit or (SuccessfulRunHistoryLimit and FailedRunHistoryLimit) for update
 	if updateReq.RunHistoryLimit < 0 || updateReq.SuccessfulRunHistoryLimit < 0 || updateReq.FailedRunHistoryLimit < 0 {
-		log.Println("Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0")
+		logError("Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 - Invalid HistoryLimit, RunHistoryLimit/SuccessfulRunHistoryLimit/FailedRunHistoryLimit should be greater than 0"))
 		return
 	} else if updateReq.RunHistoryLimit != 0 && (updateReq.SuccessfulRunHistoryLimit != 0 || updateReq.FailedRunHistoryLimit != 0) {
-		log.Println("Not allowed to set RunHistoryLimit and one of SuccessfulRunHistoryLimit or FailedRunHistoryLimit. Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit and/or FailedRunHistoryLimit)")
+		logError("Not allowed to set RunHistoryLimit and one of SuccessfulRunHistoryLimit or FailedRunHistoryLimit. Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit and/or FailedRunHistoryLimit)")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 - Not allowed to set RunHistoryLimit and one of SuccessfulRunHistoryLimit or FailedRunHistoryLimit. Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit and/or FailedRunHistoryLimit)"))
 		return
@@ -429,7 +421,7 @@ func updateScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 	
 	updateResponse := updateScheduledJob(jobName, updateReq)
 	if updateResponse.Status != http.StatusOK {
-		log.Println("Error updating job", updateResponse.Output)
+		logError("Failed to update scheduled batch job: " + updateResponse.Output)
 		w.WriteHeader(updateResponse.Status)
 		w.Write([]byte(strconv.Itoa(updateResponse.Status) + " - Failed to update scheduled batch job: " + updateResponse.Output))
 		return
@@ -437,7 +429,7 @@ func updateScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 
 	response, err := json.Marshal(updateResponse)
 	if err != nil {
-		log.Println("Failed to encode response", err)
+		logError("Failed to encode response: " + err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("500 - Failed to encode response: " + err.Error()))
 		return

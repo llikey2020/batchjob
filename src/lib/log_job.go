@@ -2,15 +2,15 @@ package batchjob
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"context"
+	"errors"
 
 	"github.com/gorilla/mux"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	apiv1 "k8s.io/api/core/v1"
 )
 
@@ -44,7 +44,6 @@ func logJob(jobId string) (response batchJobRunOutputResponse) {
 	job := getJobFromId(jobId)
 	jobName := job.Name
 	if jobName == "" {
-		log.Println("Unable to get job with jobId: " + jobId)
 		response.Status = http.StatusNotFound
 		response.ErrMessage = "Unable to get job with jobId: " + jobId
 		return
@@ -52,38 +51,23 @@ func logJob(jobId string) (response batchJobRunOutputResponse) {
 	// get the SparkApplication 
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Println("Unable to create an in-cluster config. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an in-cluster config. err: " + err.Error()
 		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Println("Unable to create an kubernetes client. err: ", err)
 		response.Status = http.StatusInternalServerError
 		response.ErrMessage = "Unable to create an kubernetes client. err: " + err.Error()
 		return
 	}
-	res := SparkApplication{}
-	err = clientset.RESTClient().Get().
-		AbsPath("/apis/sparkoperator.k8s.io/v1beta2").
-		Namespace(SPARKJOB_CONFS["SPARKJOB_NAMESPACE"]).
-		Resource("SparkApplications").
-		Name(jobName).
-		Do(context.TODO()).
-		Into(&res)
-	if errors.IsNotFound(err) {
-		log.Println("Unable to get SparkApplication. err: ", err)
-		response.Status = http.StatusNotFound
-		response.ErrMessage = "Unable to get SparkApplication. err: " + err.Error()
-		return
-	} else if err != nil {
-		log.Println("StatusCode:", errors.ReasonForError(err))
-		log.Println("Unable to get SparkApplication. err: ", err)
-		response.Status = http.StatusInternalServerError
-		response.ErrMessage = "Unable to get SparkApplication. err: " + err.Error()
+	getSparkAppResponse := getSparkApplication(jobName)
+	if getSparkAppResponse.Status != http.StatusOK {
+		response.Status = getSparkAppResponse.Status
+		response.ErrMessage = getSparkAppResponse.ErrMessage
 		return
 	}
+	res := getSparkAppResponse.SparkApp
 
 	// get spark job driver pod logs
 	podName := res.Status.DriverInfo.PodName
@@ -92,15 +76,11 @@ func logJob(jobId string) (response batchJobRunOutputResponse) {
 		GetLogs(podName, &apiv1.PodLogOptions{}).
 		Do(context.TODO()).
 		Raw()
-	if errors.IsNotFound(err) {
-		log.Println("Unable to get SparkApplication driver logs. err: ", err)
-		response.Status = http.StatusNotFound
-		response.ErrMessage = "Unable to get SparkApplication driver logs. err: " + err.Error()
-		return
-	} else if err != nil {
-		log.Println("StatusCode:", errors.ReasonForError(err))
-		log.Println("Unable to get SparkApplication driver logs. err: ", err)
+	if err != nil {
 		response.Status = http.StatusInternalServerError
+		if status := k8serrors.APIStatus(nil); errors.As(err, &status) {
+			response.Status = int(status.Status().Code)
+		}
 		response.ErrMessage = "Unable to get SparkApplication driver logs. err: " + err.Error()
 		return
 	}
@@ -114,16 +94,16 @@ func logJob(jobId string) (response batchJobRunOutputResponse) {
 	return
 }
 
-// getJobOutput is the handler for GET: /job/{name}/{id}
+// getJobOutput is the handler for GET: /jobs/get/{name}/{id}
 // Will take the name of a job/SparkApplication and Spark Application ID in URL.
 // Returns the SparkUISvc, State, and log output of the job's driver.
 func getJobOutput(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hit log job endpoint")
+	logInfo("Hit log job endpoint")
 	vars := mux.Vars(r)
 	jobId := vars["id"]
 	logJobResponse := logJob(jobId)
 	if logJobResponse.Status != http.StatusOK {
-		log.Println("Error getting logs: " + logJobResponse.ErrMessage)
+		logError("Error getting logs: " + logJobResponse.ErrMessage)
 		w.WriteHeader(logJobResponse.Status)
 		w.Write([]byte(strconv.Itoa(logJobResponse.Status) + " - Error getting logs: " + logJobResponse.ErrMessage))
 		return
@@ -131,9 +111,12 @@ func getJobOutput(w http.ResponseWriter, r *http.Request) {
 
 	response, err := json.Marshal(logJobResponse)
 	if err != nil {
-		log.Println("Failed to encode response. error:", err)
+		logError("Failed to encode response. error: " + err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("500 - Failed to encode response. error: " + err.Error()))
 		return
 	}
+	logInfo("Successfully get logs for job with ID: " + jobId)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
