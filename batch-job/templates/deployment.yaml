@@ -55,13 +55,13 @@ spec:
             - name: SPARKJOB_RESTARTPOLICY_TYPE
               value: {{ .restartPolicy.type }}
             - name: SPARKJOB_RESTARTPOLICY_ONFAILURE_RETRIES
-              value: "{{ .restartPolicy.onFailureRetries }}"
+              value: {{ .restartPolicy.onFailureRetries }}
             - name: SPARKJOB_RESTARTPOLICY_ONFAILURE_RETRY_INTERVAL
-              value: "{{ .restartPolicy.onFailureRetryInterval }}"
+              value: {{ .restartPolicy.onFailureRetryInterval }}
             - name: SPARKJOB_RESTARTPOLICY_ONSUBMISSION_RETRIES
-              value: "{{ .restartPolicy.onSubmissionFailureRetries }}"
+              value: {{ .restartPolicy.onSubmissionFailureRetries }}
             - name: SPARKJOB_RESTARTPOLICY_ONSUBMISSION_RETRY_INTERVAL
-              value: "{{ .restartPolicy.onSubmissionFailureRetryInterval }}"
+              value: {{ .restartPolicy.onSubmissionFailureRetryInterval }}
             - name: SPARKJOB_DRIVER_JAVAOPTIONS
               value: {{ .driver.javaOptions }}
             - name: SPARKJOB_EXECUTOR_JAVAOPTIONS
