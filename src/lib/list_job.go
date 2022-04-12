@@ -200,6 +200,7 @@ func readSparkApplicationsIntoBatchJob(items []SparkApplication, onlyRunning boo
 		job.CreationTimestamp = item.ObjectMeta.GetCreationTimestamp().String()
 		sparkAppSpec := item.Spec
 		job.Spec = &sparkAppSpec
+		job.Spec.SparkConf = map[string]string{}
 		jobs = append(jobs, job)
 	}
 	return jobs
@@ -214,6 +215,7 @@ func readScheduledSparkApplicationsIntoScheduledBatchJob(items []ScheduledSparkA
 		scheduledJob.Name = item.ObjectMeta.Name
 		scheduledJob.CreationTimestamp = item.ObjectMeta.GetCreationTimestamp().String()
 		scheduledJob.Spec = item.Spec
+		scheduledJob.Spec.Template.SparkConf = map[string]string{}
 		scheduledJob.Status = item.Status
 		// get and order past runs
 		runHistoryLimit := *item.Spec.SuccessfulRunHistoryLimit
@@ -559,6 +561,7 @@ func getRunsFromJobName(jobName string, includeOriginalJob bool) (response batch
 		job.State = sparkApp.Status.AppState.State
 		job.CreationTimestamp = sparkApp.ObjectMeta.GetCreationTimestamp().String()
 		job.Spec = &sparkApp.Spec
+		job.Spec.SparkConf = map[string]string{}
 		response.Jobs = append([]batchJob{job}, response.Jobs...)
 	}
 
