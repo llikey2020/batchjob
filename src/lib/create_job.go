@@ -16,6 +16,7 @@ import (
 	"github.com/pytimer/k8sutil/apply"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	serialYaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
@@ -31,6 +32,8 @@ import (
 const defaultRunHistoryLimit = 5
 // nameRegex is the regex used by Kubernetes to check for valid object name
 const nameRegex = `^[a-z]([-a-z0-9]*[a-z0-9])?$`
+// memoryUnitsRegex is the regex used to check format for memory and corelimit fields of driver and executor.
+const memoryUnitsRegex = `^([0-9.]+)([eEinumkKMgGTP]*)$`
 // nameMaxCharCount is the max number of characters in a Kuberenetes object's name
 const nameMaxCharCount = 63
 
@@ -531,7 +534,48 @@ func verifyCreateJobRequestBody(isScheduledJob bool, batchJobReq batchJobRequest
 	} else if batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Cores == 0 || batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Memory == "" {
 		response.Output = "Missing one of executor parameters: cores, or memory"
 		return
+	} else if batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Cores < 0 {
+		response.Output = "Driver cores must be a positive integer number"
+		return
+	} else if batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Cores < 0 {
+		response.Output = "Executor cores must be a positive integer number"
+		return
 	}
+
+	// error checking for corelimit and memory values.
+	if batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.CoreLimit != "" {
+		driverCoreLimit, err := resource.ParseQuantity(batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.CoreLimit)
+		driverCores, _ := resource.ParseQuantity(string(batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Cores))
+		if err != nil {
+			response.Output = "Invalid format for Driver coreLimit"
+			return
+		}
+		if (driverCoreLimit.Value() <= resource.MaxMilliValue && driverCores.Value() <= resource.MaxMilliValue && driverCoreLimit.MilliValue() <= driverCores.MilliValue()) || driverCoreLimit.ScaledValue(resource.Giga) < driverCores.ScaledValue(resource.Giga) {
+			response.Output = "Driver cores can not exceed core limit"
+			return
+		}
+	}
+	if batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.CoreLimit != "" {
+		executorCoreLimit, err := resource.ParseQuantity(batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.CoreLimit)
+		executorCores, _ := resource.ParseQuantity(string(batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Cores))
+		if err != nil {
+			response.Output = "Invalid format for Executor coreLimit"
+			return
+		}
+		if (executorCoreLimit.Value() <= resource.MaxMilliValue && executorCores.Value() <= resource.MaxMilliValue && executorCoreLimit.MilliValue() <= executorCores.MilliValue()) || executorCoreLimit.ScaledValue(resource.Giga) < executorCores.ScaledValue(resource.Giga) {
+			response.Output = "Executor cores can not exceed core limit"
+			return
+		}
+	}
+	if match, _ := regexp.MatchString(memoryUnitsRegex, batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Memory); !match{
+		response.Output = "Invalid format for Driver memory"
+		return
+	}
+	if match, _ := regexp.MatchString(memoryUnitsRegex, batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Memory); !match{
+		response.Output = "Invalid format for Driver memory"
+		return
+	}
+
 	if isScheduledJob {
 		// error 400 for invalid format and input
 		_, err := cron.ParseStandard(batchJobReq.Schedule.CronSchedule)
@@ -580,6 +624,7 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(strconv.Itoa(verifyRequestResponse.Status) + " - Invalid request: " + verifyRequestResponse.Output))
 		return
 	}
+
 	// create SparkApplication
 	var response []byte
 	var createReq batchJobManifest
@@ -629,6 +674,7 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(strconv.Itoa(verifyRequestResponse.Status) + " - Invalid request: " + verifyRequestResponse.Output))
 		return
 	}
+
 	// create ScheduledSparkApplication
 	var response []byte
 	var createReq scheduledBatchJobManifest
