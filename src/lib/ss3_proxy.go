@@ -81,7 +81,7 @@ func uploadFile(bucketName string, fileType FileType, fileName string, isShared 
 	}
 
 	response.Status = http.StatusOK
-	response.Output = "Uploaded file to S3 bucket: " + bucketName + " with object key: " + objectKey
+	response.Output = fmt.Sprintf("s3a://%s/%s", S3_BUCKET_NAME, objectKey)
 	return
 }
 
