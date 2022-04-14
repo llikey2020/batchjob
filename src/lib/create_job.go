@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"errors"
@@ -42,14 +43,15 @@ const scheduledManifestFileSuffix = "_scheduled.yaml"
 
 // goRoutineCreated tracks whether the go routine which handles suspending one run scheduled jobs.
 var goRoutineCreated bool
-// nonRepeatJobsSync stores scheduled job names to batch job manifest. 
+
+// nonRepeatJobsSync stores scheduled job names to batch job manifest.
 // Used to keep track of scheduled jobs that should run only once (one run scheduled jobs).
 var nonRepeatJobsSync sync.Map
 
-// batchJobMetadata holds metadata of a batch job. 
+// batchJobMetadata holds metadata of a batch job.
 type batchJobMetadata struct {
 	// Name is name of the batch job or scheduled batch job.
-	Name      string `yaml:"name" json:"name"`
+	Name string `yaml:"name" json:"name"`
 	// Namespace is the namespace the job will be created on.
 	Namespace string `yaml:"namespace"`
 }
@@ -94,6 +96,7 @@ type batchJobSpecSparkConf struct {
 	SparkHistoryFsLogDirectory              string `yaml:"spark.history.fs.logDirectory,omitempty"`
 	SparkHistoryProvider                    string `yaml:"spark.history.provider,omitempty"`
 	SparkKubernetesContainerImagePullPolicy string `yaml:"spark.kubernetes.container.image.pullPolicy,omitempty"`
+	SparkUiPrometheusEnabled                string `yaml:"spark.ui.prometheus.enabled"`
 }
 
 // batchJobSpecSparkPodSpec holds fields which define common things for a Spark driver or executor pod.
@@ -117,6 +120,15 @@ type batchJobSpecExecutor struct {
 	JavaOptions              string `yaml:"javaOptions,omitempty"`
 }
 
+// batchJobSpecMonitoring holds specification on the Spark Monitoring
+type batchJobSpecMonitoring struct {
+	ExposeDriverMetrics   bool `yaml:"exposeDriverMetrics"`
+	ExposeExecutorMetrics bool `yaml:"exposeExecutorMetrics"`
+	Prometheus            struct {
+		JmxExporterJar string `yaml:"jmxExporterJar"`
+	} `yaml:"prometheus"`
+}
+
 // batchJobSpec holds specification for a batch job and scheduled batch job.
 type batchJobSpec struct {
 	Type                string                        `yaml:"type" json:"type"`
@@ -133,16 +145,17 @@ type batchJobSpec struct {
 	SparkConf           batchJobSpecSparkConf         `yaml:"sparkConf"`
 	Driver              batchJobSpecDriver            `yaml:"driver" json:"driver"`
 	Executor            batchJobSpecExecutor          `yaml:"executor" json:"executor"`
+	Monitoring          batchJobSpecMonitoring        `yaml:"monitoring,omitempty" json:"monitoring,omitempty"`
 }
 
 // scheduledBatchJobSpec holds specification of a scheduled batch job
 type scheduledBatchJobSpec struct {
-	Schedule                    string              `yaml:"schedule"`
-	Suspend                     bool                `yaml:"suspend"`
-	ConcurrencyPolicy           string              `yaml:"concurrencyPolicy"`
-	SuccessfulRunHistoryLimit   int32               `yaml:"successfulRunHistoryLimit,omitempty"`
-	FailedRunHistoryLimit       int32               `yaml:"failedRunHistoryLimit,omitempty"`
-	Template                    batchJobSpec        `yaml:"template"`
+	Schedule                  string       `yaml:"schedule"`
+	Suspend                   bool         `yaml:"suspend"`
+	ConcurrencyPolicy         string       `yaml:"concurrencyPolicy"`
+	SuccessfulRunHistoryLimit int32        `yaml:"successfulRunHistoryLimit,omitempty"`
+	FailedRunHistoryLimit     int32        `yaml:"failedRunHistoryLimit,omitempty"`
+	Template                  batchJobSpec `yaml:"template"`
 }
 
 // batchJobManifest holds fields for creating a batch job using a yaml manifest.
@@ -155,30 +168,30 @@ type batchJobManifest struct {
 
 // scheduledBatchJobManifest holds fields for creating a scheduled batch job using a yaml manifest.
 type scheduledBatchJobManifest struct {
-	ApiVersion string                   `yaml:"apiVersion"`
-	Kind       string                   `yaml:"kind"`
-	Metadata   batchJobMetadata         `yaml:"metadata" json:"metadata"`
-	Spec       scheduledBatchJobSpec    `yaml:"spec" json:"spec"`
+	ApiVersion string                `yaml:"apiVersion"`
+	Kind       string                `yaml:"kind"`
+	Metadata   batchJobMetadata      `yaml:"metadata" json:"metadata"`
+	Spec       scheduledBatchJobSpec `yaml:"spec" json:"spec"`
 }
 
 // batchJobSchedule holds fields in a request to create a scheduled batch job.
 type batchJobSchedule struct {
-	CronSchedule                    string
-	ConcurrencyPolicy               string
-	Suspend                         bool
-	SuccessfulRunHistoryLimit       int32
-	FailedRunHistoryLimit           int32
-	RunHistoryLimit                 int32
+	CronSchedule              string
+	ConcurrencyPolicy         string
+	Suspend                   bool
+	SuccessfulRunHistoryLimit int32
+	FailedRunHistoryLimit     int32
+	RunHistoryLimit           int32
 }
 
 // batchJobRequest holds fields in a request to create a batch job or scheduled batch job.
 // To create a batch job, Metadata and Spec are needed.
 // To create a scheduled batch job, Metadata, Spec, and Schedule are needed. OneRunScheduledJob is optional.
 type batchJobRequest struct {
-	Metadata            batchJobMetadata `yaml:"metadata" json:"metadata"`
-	Spec                batchJobSpec     `yaml:"spec" json:"spec"`
-	OneRunScheduledJob  bool             `yaml:"oneRunScheduledJob" json:"oneRunScheduledJob"`
-	Schedule            batchJobSchedule `yaml:"schedule,omitempty" json:"schedule,omitempty"`
+	Metadata           batchJobMetadata `yaml:"metadata" json:"metadata"`
+	Spec               batchJobSpec     `yaml:"spec" json:"spec"`
+	OneRunScheduledJob bool             `yaml:"oneRunScheduledJob" json:"oneRunScheduledJob"`
+	Schedule           batchJobSchedule `yaml:"schedule,omitempty" json:"schedule,omitempty"`
 }
 
 // serviceResponse holds the response given to the user after a request is done.
@@ -216,6 +229,7 @@ func createBatchJobSpecSparkConf(batchJobSpecSparkConf *batchJobSpecSparkConf) {
 	batchJobSpecSparkConf.SparkSqlSequoiadpMetaserviceUri = SPARKJOB_SPARKCONFS["spark.sql.sequoiadp.metaservice.uri"]
 	batchJobSpecSparkConf.SparkHistoryFsLogDirectory = SPARKJOB_SPARKCONFS["spark.history.fs.logDirectory"]
 	batchJobSpecSparkConf.SparkHistoryProvider = SPARKJOB_SPARKCONFS["spark.history.provider"]
+	batchJobSpecSparkConf.SparkUiPrometheusEnabled = SPARKJOB_SPARKCONFS["spark.ui.prometheus.enabled"]
 }
 
 // createBatchJobSpecRestartPolicy populates batch job restart policy with values from SPARKJOB_CONFS.
@@ -245,6 +259,15 @@ func createBatchJobSpecExecutor(jobSpecExecutor *batchJobSpecExecutor) {
 	jobSpecExecutor.JavaOptions = SPARKJOB_CONFS["SPARKJOB_EXECUTOR_JAVAOPTIONS"]
 }
 
+// createBatchJobSpecMonitoring populates batch job monitoring
+func createBatchJobSpecMonitoring() batchJobSpecMonitoring {
+	b := batchJobSpecMonitoring{}
+	b.ExposeDriverMetrics = true
+	b.ExposeExecutorMetrics = true
+	b.Prometheus.JmxExporterJar = "/prometheus/jmx_prometheus_javaagent-0.11.0.jar"
+	return b
+}
+
 // createBatchJobSpec populates a batch job spec with default values and values from SPARKJOB_CONFS.
 func createBatchJobSpec(jobSpecTemplate *batchJobSpec) {
 	jobSpecTemplate.Mode = "cluster"
@@ -256,6 +279,9 @@ func createBatchJobSpec(jobSpecTemplate *batchJobSpec) {
 	createBatchJobSpecSparkConf(&jobSpecTemplate.SparkConf)
 	createBatchJobSpecDriver(&jobSpecTemplate.Driver)
 	createBatchJobSpecExecutor(&jobSpecTemplate.Executor)
+	if strings.ToLower(SPARKJOB_CONFS["SPARKJOB_ENABLE_METRICS"]) == "true" {
+		jobSpecTemplate.Monitoring = createBatchJobSpecMonitoring()
+	}
 }
 
 // createScheduledBatchJobSpec populates the scheduledBatchJobSpec struct with values in batchJobSpec and batchJobSchedule from a batchJobRequest.
@@ -346,7 +372,7 @@ func createJob(job batchJobManifest) (response serviceResponse) {
         response.Status = http.StatusInternalServerError
 		response.Output = "Unable to Create SparkApplication. err: " + err.Error()
 		return
-    }
+	}
 
 	// Create the SparkApplication using the yaml
 	result, err := dynamicClient.Resource(deploymentRes).
