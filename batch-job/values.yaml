@@ -6,69 +6,55 @@ replicaCount: 1
 
 image:
   repository: gitlab.planetrover.ca:5050/sequoiadp/batch-job
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "batchjob-dev"
+  tag: "latest"
 
-imagePullSecrets: [name: docker-login]
+imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+s3:
+  endpoint: ""
+  secret: ""
+  bucketName: ""
+
+sparkEventLogDir: ""
+
 sparkJob:
-  namespace: "batchjob"
-  sparkVersion: "3.1.2"
-  image: "gitlab.planetrover.ca:5050/sequoiadp/spark:423195d2aa00748f519db1fd7f993478316bb69d" #"gcr.io/spark-operator/spark:v3.1.1"
+  namespace: "default"
+  sparkVersion: "3.0.2"
+  image: "gitlab.planetrover.ca:5050/sequoiadp/spark:latest"
   # list of strings
-  imagePullSecrets: [name: docker-login]
+  imagePullSecrets: []
   imagePullPolicy: IfNotPresent
   serviceAccount: spark
   restartPolicy:
-    type: Never
+    type: OnFailure
+    onFailureRetries: 3
+    onFailureRetryInterval: 10
+    onSubmissionFailureRetries: 3
+    onSubmissionFailureRetryInterval: 10
   sparkConf:
     spark.jars.ivy:                                          /tmp/.ivy
     spark.sql.extensions:                                    io.delta.sql.DeltaSparkSessionExtension
     spark.sql.catalog.spark_catalog:                         org.apache.spark.sql.delta.catalog.DeltaCatalog
     spark.delta.logStore.class:                              org.apache.spark.sql.delta.storage.LocalLogStore
-    spark.sql.warehouse.dir:                                 "s3a://staging-2-bucket/spark-warehouse/"
+    spark.sql.warehouse.dir:                                 alluxio://alluxio-master-0:19998/spark-warehouse/
     spark.eventLog.enabled:                                  "true"
-    spark.eventLog.dir:                                      "s3a://staging-2-bucket/spark-logs/"
-    spark.hadoop.fs.s3a.endpoint:                            192.168.6.29:8002
+    spark.eventLog.dir:                                      alluxio://alluxio-master-0:19998/spark-logs/
+    spark.hadoop.fs.s3a.endpoint:                            192.168.6.97:8002
     spark.hadoop.fs.s3a.access.key:                          ABCDEFGHIJKLMNOPQRST
     spark.hadoop.fs.s3a.secret.key:                          abcdefghijklmnopqrstuvwxyz0123456789ABCD
     spark.hadoop.fs.s3a.impl:                                org.apache.hadoop.fs.s3a.S3AFileSystem
-    spark.hadoop.fs.s3a.connection.ssl.enabled:              false
-    spark.kubernetes.container.image.pullPolicy:             IfNotPresent
-    spark.hadoop.hive.metastore.uris:                        #thrift://schema:9083
-    spark.sql.sequoiadp.metaservice.uri:                     #metadata:9090
-    spark.history.fs.logDirectory:                           "s3a://staging-2-bucket/spark-logs/"
-    spark.kubernetes.file.upload.path:                       /opt/spark/
-    spark.driver.extraClassPath:                             /opt/spark/jars/spark-sequoiadb_3.0-3.2.0-SNAPSHOT.jar,/opt/spark/jars/sequoiadb-driver-5.0.2.jar,/opt/spark/jars/hadoop-aws-3.2.0.jar,/spark/jars/aws-java-sdk-bundle-1.11.375.jar
-    spark.executor.extraClassPath:                           /opt/spark/jars/spark-sequoiadb_3.0-3.2.0-SNAPSHOT.jar,/opt/spark/jars/sequoiadb-driver-5.0.2.jar,/opt/spark/jars/hadoop-aws-3.2.0.jar,/spark/jars/aws-java-sdk-bundle-1.11.375.jar
-    log4j.logger.org.apache.hadoop.metrics2:                 WARN
-    spark.sql.session.timeZone:                              #"EST5EDT"
-    spark.driver.extraJavaOptions: -Duser.timezone=Canada/Eastern
-    spark.executor.extraJavaOptions: -Duser.timezone=Canada/Eastern
+    spark.hadoop.fs.s3a.connection.ssl.enabled:              "false"
+    spark.ui.prometheus.enabled:                             "true"
+  metrics:
+    enabled: "true"
   driver:
-    javaOptions: #-Duser.timezone=Canada/Eastern #Asia/Hong_Kong #EST5EDT #-Dlog4j.configuration=/opt/log4j.properties #-Dalluxio.master.rpc.addresses=alluxio-master-0:19998
+    javaOptions: -Dalluxio.master.rpc.addresses=alluxio-master-0:19998
   executor:
-    javaOptions: #-Duser.timezone=Canada/Eastern #Asia/Hong_Kong #EST5EDT #-Dlog4j.configuration=/opt/log4j.properties #-Dalluxio.master.rpc.addresses=alluxio-master-0:19998
-  sparkEventLogs:
-    ss3BucketName: staging-2-bucket
-    sparkEventLogDir: spark-logs
-  bucketName: staging-2-bucket
-  endpoint: 192.168.6.29:8002
-  accessKey: ABCDEFGHIJKLMNOPQRST
-  secretKey: abcdefghijklmnopqrstuvwxyz0123456789ABCD
-
-s3:
-  bucketName: staging-2-bucket
-  endpoint: 192.168.6.29:8002
-  accessKey: ABCDEFGHIJKLMNOPQRST
-  secretKey: abcdefghijklmnopqrstuvwxyz0123456789ABCD
-  secret: sequoiadp-services-s3-secret #{accessKey: ABCDEFGHIJKLMNOPQRST, secretKey: abcdefghijklmnopqrstuvwxyz0123456789ABCD}
-          
-sparkEventLogDir: "spark-logs"
-
+    javaOptions: -Dalluxio.master.rpc.addresses=alluxio-master-0:19998
 
 rbac:
   create: true
