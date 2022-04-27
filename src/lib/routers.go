@@ -39,7 +39,7 @@ func init() {
 
 	sparkConfs := os.Getenv("SPARKJOB_SPARKCONF")
 	for _, conf := range strings.Split(strings.TrimSpace(sparkConfs), " ") {
-		sparkConf := strings.Split(conf, "=")
+		sparkConf := strings.SplitN(conf, "=", 2)
 		SPARKJOB_SPARKCONFS[sparkConf[0]] = sparkConf[1]
 	}
 
