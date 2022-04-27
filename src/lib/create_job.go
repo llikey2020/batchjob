@@ -609,7 +609,7 @@ func verifyCreateJobRequestBody(isScheduledJob bool, batchJobReq batchJobRequest
 			response.Output = "Invalid cron schedule format: " + err.Error()
 			return
 		}
-		 if batchJobReq.Schedule.ConcurrencyPolicy == "" {
+		if batchJobReq.Schedule.ConcurrencyPolicy == "" {
 			response.Output = "Missing schedule parameters: concurrencyPolicy"
 			return
 		} else if batchJobReq.Schedule.ConcurrencyPolicy != string(ConcurrencyAllow) && batchJobReq.Schedule.ConcurrencyPolicy != string(ConcurrencyForbid) && batchJobReq.Schedule.ConcurrencyPolicy != string(ConcurrencyReplace) {
@@ -620,6 +620,12 @@ func verifyCreateJobRequestBody(isScheduledJob bool, batchJobReq batchJobRequest
 			return
 		} else if batchJobReq.Schedule.RunHistoryLimit != 0 && (batchJobReq.Schedule.SuccessfulRunHistoryLimit != 0 || batchJobReq.Schedule.FailedRunHistoryLimit != 0) {
 			response.Output = "Not allowed to set RunHistoryLimit and (SuccessfulRunHistoryLimit + FailedRunHistoryLimit). Must set either RunHistoryLimit or (SuccessfulRunHistoryLimit + FailedRunHistoryLimit)"
+			return
+		}
+		// 409 for if scheduled job already exists
+		if getResponse := getScheduledSparkApplication(batchJobReq.Metadata.Name); getResponse.Status == http.StatusOK {
+			response.Status = http.StatusConflict
+			response.Output = "Cannot create scheduled batch job: scheduled batch job with name \"" + batchJobReq.Metadata.Name + "\" already exists."
 			return
 		}
 	}
