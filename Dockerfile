@@ -1,4 +1,5 @@
-FROM debian
+ARG CI_REGISTRY
+FROM ${CI_REGISTRY}/planetrover/infrastructure/debian:stable
 
 LABEL "Name"="batch-job"
 LABEL "Version"="0.1.0-alpha"

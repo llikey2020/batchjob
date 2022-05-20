@@ -8,10 +8,10 @@ workflow:
     - if: '$CI_COMMIT_BRANCH'
 
 variables:
-  GIT_RUNNER_TAG: "k8s-cluster-2"
+  CI_RUNNER_TAG: "k8s-cluster-2"
 
 default:
-  tags: ["${GIT_RUNNER_TAG}"]
+  tags: ["${CI_RUNNER_TAG}"]
 
 .helm-job:
   variables:
@@ -27,10 +27,10 @@ stages:
   - package
   - publish
 
-docker-lint:
-  stage: lint
-  extends:
-    - .dockerfile-lint
+#docker-lint:
+#  stage: lint
+#  extends:
+#    - .dockerfile-lint
 
 go-lint:
   stage: lint
@@ -45,11 +45,14 @@ helm-lint:
     HELMCHART: batch-job
 
 go-build:
-  image: golang:1.16
+  image: ${CI_REGISTRY}/planetrover/infrastructure/golang:1.16
   stage: build
   before_script:
     - cd src
   script:
+    - export http_proxy=${PROXY_SERVER}
+    - export https_proxy=${http_proxy}
+    - export no_proxy="localhost,127.0.0.0/8,::1"
     - go build -o ../batch-service
   artifacts:
     paths:
