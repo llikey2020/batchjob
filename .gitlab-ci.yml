@@ -8,7 +8,7 @@ workflow:
     - if: '$CI_COMMIT_BRANCH'
 
 variables:
-  CI_RUNNER_TAG: "k8s-cluster-2"
+  CI_RUNNER_TAG: "k8s-cluster-1"
 
 default:
   tags: ["${CI_RUNNER_TAG}"]
@@ -26,7 +26,7 @@ stages:
   - docker-publish
   - package
   - publish
-
+  
 #docker-lint:
 #  stage: lint
 #  extends:
@@ -50,10 +50,11 @@ go-build:
   before_script:
     - cd src
   script:
-    - export http_proxy=${PROXY_SERVER}
-    - export https_proxy=${http_proxy}
-    - export no_proxy="localhost,127.0.0.0/8,::1"
-    - go build -o ../batch-service
+    - |
+      export http_proxy=${HTTP_PROXY}
+      export https_proxy=${HTTP_PROXY}
+      export no_proxy=${NO_PROXY}
+      go build -o ../batch-service
   artifacts:
     paths:
       - batch-service
