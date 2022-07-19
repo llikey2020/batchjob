@@ -14,6 +14,20 @@ else
     exit 1
 fi
 
+go version > /dev/null
+if [ $? -ne 0 ];
+then
+    echo "Go command not found. Please follow the steps in README file to install the version 1.10.4 of go."
+    exit 1
+fi
+
+v=`go version | { read _ _ v _; echo ${v#go}; }`
+if [ $v != "1.16" ];
+then
+    echo "You have the wrong version with GoLang. Please follow the steps in README file to install the version 1.16 of go."
+    exit 1
+fi
+
 go build -o ../batch-service
 
 if [ $? -ne 0 ];
@@ -61,6 +75,7 @@ then
 fi
 
 echo "Newly build images can be found locally: ${TARGET}:${TAG}"
+echo "The tag is ${TAG}. Please follow the command in the README file to push image if you want to."
 
 exit 0
 
