@@ -13,6 +13,7 @@ spec:
   mainClass: com.databricks.spark.sql.perf.RunTPCHLargeDatePartition
   mainApplicationFile: "alluxio://alluxio-master-0.staging-48-testing:19998/spark-sql-perf_2.12-0.5.1-SNAPSHOT.jar"
   sparkVersion: "3.0.2"
+  batchScheduler: "volcano"
   restartPolicy:
     type: Never
   dynamicAllocation:

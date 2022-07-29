@@ -140,6 +140,7 @@ type batchJobSpec struct {
 	MainApplicationFile string                        `yaml:"mainApplicationFile" json:"mainApplicationFile"`
 	Arguments           []string                      `yaml:"arguments,omitempty" json:"arguments,omitempty"`
 	SparkVersion        string                        `yaml:"sparkVersion"`
+	BatchScheduler      string                        `yaml:"batchScheduler"`
 	RestartPolicy       batchJobSpecRestartPolicy     `yaml:"restartPolicy"`
 	DynamicAllocation   batchJobSpecDynamicAllocation `yaml:"dynamicAllocation,omitempty"`
 	SparkConf           batchJobSpecSparkConf         `yaml:"sparkConf"`
@@ -275,6 +276,7 @@ func createBatchJobSpec(jobSpecTemplate *batchJobSpec) {
 	jobSpecTemplate.ImagePullSecrets = SPARKJOB_IMAGEPULLSECRETS
 	jobSpecTemplate.ImagePullPolicy = SPARKJOB_CONFS["SPARKJOB_IMAGEPULLPOLICY"]
 	jobSpecTemplate.SparkVersion = SPARKJOB_CONFS["SPARKJOB_SPARKVERSION"]
+	jobSpecTemplate.BatchScheduler = SPARKJOB_CONFS["SPARKJOB_BATCHSCHEDULER"]
 	createBatchJobSpecRestartPolicy(&jobSpecTemplate.RestartPolicy)
 	createBatchJobSpecSparkConf(&jobSpecTemplate.SparkConf)
 	createBatchJobSpecDriver(&jobSpecTemplate.Driver)
