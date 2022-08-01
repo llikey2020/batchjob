@@ -44,6 +44,8 @@ spec:
               value: {{ .namespace }}
             - name: SPARKJOB_SPARKVERSION
               value: {{ .sparkVersion }}
+            - name: SPARKJOB_BATCHSCHEDULER
+              value: {{ .batchScheduler }}
             - name: SPARKJOB_IMAGE
               value: {{ .image }}
             - name: SPARKJOB_IMAGEPULLSECRETS

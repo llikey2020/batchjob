@@ -24,6 +24,7 @@ sparkEventLogDir: ""
 sparkJob:
   namespace: "default"
   sparkVersion: "3.0.2"
+  batchScheduler: "volcano"
   image: "gitlab.planetrover.ca:5050/sequoiadp/spark:latest"
   # list of strings
   imagePullSecrets: []

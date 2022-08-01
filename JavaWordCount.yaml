@@ -15,6 +15,7 @@ spec:
   arguments:
     - alluxio://alluxio-master-0.staging-48-testing:19998/lorem.txt
   sparkVersion: "3.0.2"
+  batchScheduler: "volcano"
   restartPolicy:
     type: Never
   dynamicAllocation:
