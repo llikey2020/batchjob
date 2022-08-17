@@ -659,6 +659,17 @@ func createBatchJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// CoreLimit can be set to digital numebr like 1,2,3 which is the same as Cores
+	// Or it can also be set to values like 1000m, 2000m. This is why CoreLimit is a string type
+	// but Cores is int32. When CoreLimit is not set, we are going to set this to be the same as Cores.
+	if batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.CoreLimit == "" {
+			batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.CoreLimit = strconv.FormatInt(int64(batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Cores), 10)
+	}
+
+	if batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.CoreLimit  == "" {
+		batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.CoreLimit = strconv.FormatInt(int64(batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Cores), 10)
+	}
+	
 	// create SparkApplication
 	var response []byte
 	var createReq batchJobManifest
@@ -707,6 +718,14 @@ func createScheduledBatchJob(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(verifyRequestResponse.Status)
 		w.Write([]byte(strconv.Itoa(verifyRequestResponse.Status) + " - Invalid request: " + verifyRequestResponse.Output))
 		return
+	}
+
+	if batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.CoreLimit == "" {
+			batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.CoreLimit = strconv.FormatInt(int64(batchJobReq.Spec.Driver.batchJobSpecSparkPodSpec.Cores), 10)
+	}
+
+	if batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.CoreLimit  == "" {
+		batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.CoreLimit = strconv.FormatInt(int64(batchJobReq.Spec.Executor.batchJobSpecSparkPodSpec.Cores), 10)
 	}
 
 	// create ScheduledSparkApplication
